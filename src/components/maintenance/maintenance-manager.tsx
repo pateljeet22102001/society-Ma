@@ -57,7 +57,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [selectedBill, setSelectedBill] = useState<MaintenanceBill | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
-  const [flatSearch, setFlatSearch] = useState("");
+  const [pickFlatMode, setPickFlatMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
@@ -77,16 +77,9 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     [bills],
   );
 
-  const pendingFlatOptions = useMemo(() => {
-    const q = flatSearch.trim().toLowerCase();
-    return pendingBills.filter((bill) => {
-      const flatNo =
-        bill.flat?.flat_number ||
-        flats.find((f) => f.id === bill.flat_id)?.flat_number ||
-        "";
-      return !q || flatNo.toLowerCase().includes(q);
-    });
-  }, [pendingBills, flats, flatSearch]);
+  const watchedStartMonth = Number(generateForm.watch("bill_month") || 1);
+  const watchedStartYear = Number(generateForm.watch("bill_year") || new Date().getFullYear());
+  const previewPeriod = billingPeriodLabel(watchedStartMonth, watchedStartYear, frequencyMonths);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -123,10 +116,14 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   }
 
   function openPay(bill?: MaintenanceBill) {
-    const target = bill || pendingBills[0] || null;
-    selectBillForPayment(target);
+    if (bill) {
+      selectBillForPayment(bill);
+      setPickFlatMode(false);
+    } else {
+      selectBillForPayment(null);
+      setPickFlatMode(true);
+    }
     setPaymentMode("upi");
-    setFlatSearch("");
     setPayOpen(true);
   }
 
@@ -218,14 +215,14 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
       <Card>
         <CardHeader
           title="Maintenance Bills"
-          description={`Current cycle: ${billingFrequencyLabel(frequencyMonths)}. Generate bills and record full or partial payments.`}
+          description={`Cycle: ${billingFrequencyLabel(frequencyMonths)}. Generate → flats become Pending → click Pay → Amount + Payment Method.`}
           action={
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setGenerateOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Generate Bills
               </Button>
-              <Button onClick={() => openPay()}>
+              <Button onClick={() => openPay()} disabled={!pendingBills.length}>
                 <Wallet className="h-4 w-4" />
                 Add Payment
               </Button>
@@ -251,10 +248,10 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
           data={paged}
           keyExtractor={(row) => row.id}
           emptyTitle="No maintenance bills"
-          emptyDescription="Generate bills for the selected month and year."
+          emptyDescription="Click Generate Bills. All active flats will become Pending for that period."
           actions={(row) =>
             row.status !== "paid" ? (
-              <Button size="sm" variant="outline" onClick={() => openPay(row)}>
+              <Button size="sm" onClick={() => openPay(row)}>
                 Pay
               </Button>
             ) : (
@@ -268,14 +265,13 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
       <Modal open={generateOpen} onClose={() => setGenerateOpen(false)} title="Generate Maintenance Bills">
         <form className="space-y-4" onSubmit={generateForm.handleSubmit(onGenerate)}>
           <div className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800">
-            Billing frequency: <strong>{billingFrequencyLabel(frequencyMonths)}</strong>
-            {frequencyMonths > 1
-              ? ". Choose the starting month of the period (example: Apr for Apr–Jun)."
-              : ". Choose the billing month."}
+            Period will be: <strong>{previewPeriod}</strong>
+            <br />
+            All active flats will become <strong>Pending</strong> for this period.
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
-              label={frequencyMonths > 1 ? "Period Start Month" : "Month"}
+              label={frequencyMonths > 1 ? "From Month (start)" : "Month"}
               options={[...MONTHS]}
               {...generateForm.register("bill_month")}
             />
@@ -283,10 +279,10 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
             <Input
               label={
                 frequencyMonths === 3
-                  ? "Amount (for 3 months)"
+                  ? "Amount (full 3 months)"
                   : frequencyMonths === 6
-                    ? "Amount (for 6 months)"
-                    : "Amount (for 1 month)"
+                    ? "Amount (full 6 months)"
+                    : "Amount (1 month)"
               }
               type="number"
               {...generateForm.register("amount")}
@@ -294,12 +290,11 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
             <Input label="Late Fee" type="number" {...generateForm.register("late_fee")} />
           </div>
           <p className="text-xs text-slate-500">
-            Change frequency anytime in Settings → Maintenance Settings:{" "}
-            {BILLING_FREQUENCIES.map((f) => f.label).join(" / ")}
+            Frequency from Settings: {BILLING_FREQUENCIES.map((f) => f.label).join(" / ")}
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={loading}>Generate</Button>
+            <Button type="submit" loading={loading}>Generate Pending Bills</Button>
           </div>
         </form>
       </Modal>
@@ -308,100 +303,37 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
         open={payOpen}
         onClose={() => setPayOpen(false)}
         title="Collect Payment"
-        description="Tick one flat, confirm amount, choose payment method."
-        size="lg"
+        description={
+          selectedBill
+            ? `${getFlatNumber(selectedBill)} · ${billingPeriodLabel(selectedBill.bill_month, selectedBill.bill_year, Number(selectedBill.period_months || 1))} · Pending ${formatCurrency(selectedBill.pending_amount)}`
+            : "Select a pending flat, then enter amount and payment method."
+        }
       >
         <div className="space-y-5">
-          <SearchInput
-            value={flatSearch}
-            onChange={setFlatSearch}
-            placeholder="Search flat number..."
-          />
-
-          <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-2">
-            {pendingFlatOptions.length ? (
-              pendingFlatOptions.map((bill) => {
-                const selected = selectedBill?.id === bill.id;
-                return (
-                  <button
-                    key={bill.id}
-                    type="button"
-                    onClick={() => selectBillForPayment(bill)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
-                      selected
-                        ? "bg-primary/10 ring-2 ring-primary/30"
-                        : "hover:bg-slate-50",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border",
-                        selected
-                          ? "border-primary bg-primary text-white"
-                          : "border-slate-300 bg-white",
-                      )}
-                    >
-                      {selected ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-slate-900">
-                        {getFlatNumber(bill)}
-                      </span>
-                      <span className="block text-xs text-slate-500">
-                        {billingPeriodLabel(
-                          bill.bill_month,
-                          bill.bill_year,
-                          Number(bill.period_months || 1),
-                        )}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold text-amber-700">
-                      {formatCurrency(bill.pending_amount)}
-                    </span>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="px-3 py-8 text-center text-sm text-slate-500">
-                No pending flats. Generate bills first.
-              </p>
-            )}
-          </div>
-
-          {selectedBill ? (
-            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Selected <strong className="text-slate-900">{getFlatNumber(selectedBill)}</strong>
-              {" · "}Pending{" "}
-              <strong className="text-slate-900">
-                {formatCurrency(selectedBill.pending_amount)}
-              </strong>
-            </div>
+          {pickFlatMode || !selectedBill ? (
+            <Select
+              label="Pending Flat"
+              placeholder="Select flat"
+              options={pendingBills.map((bill) => ({
+                value: bill.id,
+                label: `${getFlatNumber(bill)} · ${billingPeriodLabel(bill.bill_month, bill.bill_year, Number(bill.period_months || 1))} · ${formatCurrency(bill.pending_amount)}`,
+              }))}
+              value={selectedBill?.id || ""}
+              onChange={(e) => {
+                const bill = pendingBills.find((b) => b.id === e.target.value) || null;
+                selectBillForPayment(bill);
+              }}
+            />
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Input
-              label="Amount"
-              type="number"
-              step="0.01"
-              value={payAmount}
-              onChange={(e) => setPayAmount(e.target.value)}
-              placeholder="Enter amount"
-            />
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full sm:w-auto"
-                disabled={!selectedBill}
-                onClick={() =>
-                  selectedBill && setPayAmount(String(Number(selectedBill.pending_amount)))
-                }
-              >
-                Pay Full
-              </Button>
-            </div>
-          </div>
+          <Input
+            label="Amount"
+            type="number"
+            step="0.01"
+            value={payAmount}
+            onChange={(e) => setPayAmount(e.target.value)}
+            placeholder="Enter amount"
+          />
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-700">Payment Method</p>
@@ -433,7 +365,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
             </Button>
             <Button type="button" loading={loading} onClick={onPay} disabled={!selectedBill}>
               <Wallet className="h-4 w-4" />
-              Collect Payment
+              Save Payment
             </Button>
           </div>
         </div>
