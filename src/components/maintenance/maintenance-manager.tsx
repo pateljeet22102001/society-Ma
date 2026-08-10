@@ -6,12 +6,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import type { Flat, MaintenanceBill, MaintenanceSettings, Wing } from "@/types/database";
+import type { Flat, MaintenanceBill, MaintenanceSettings, PaymentMode, Wing } from "@/types/database";
 import {
   generateMaintenanceSchema,
-  maintenancePaymentSchema,
   type GenerateMaintenanceInput,
-  type MaintenancePaymentInput,
 } from "@/lib/validations/finance";
 import {
   addMaintenancePaymentAction,
@@ -25,11 +23,10 @@ import {
   PAGE_SIZE,
   PAYMENT_MODES,
 } from "@/lib/constants";
-import { billingPeriodLabel, formatCurrency, formatDate } from "@/lib/utils";
+import { billingPeriodLabel, cn, formatCurrency, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge, statusBadgeVariant } from "@/components/ui/badge";
@@ -58,6 +55,9 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [generateOpen, setGenerateOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(searchParams.get("pay") === "1");
   const [selectedBill, setSelectedBill] = useState<MaintenanceBill | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
+  const [flatSearch, setFlatSearch] = useState("");
   const [loading, setLoading] = useState(false);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
@@ -72,15 +72,21 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     },
   });
 
-  const payForm = useForm<MaintenancePaymentInput>({
-    resolver: zodResolver(maintenancePaymentSchema),
-    defaultValues: {
-      bill_id: "",
-      amount: 0,
-      payment_date: new Date().toISOString().slice(0, 10),
-      payment_mode: "upi",
-    },
-  });
+  const pendingBills = useMemo(
+    () => bills.filter((b) => b.status !== "paid" && Number(b.pending_amount) > 0),
+    [bills],
+  );
+
+  const pendingFlatOptions = useMemo(() => {
+    const q = flatSearch.trim().toLowerCase();
+    return pendingBills.filter((bill) => {
+      const flatNo =
+        bill.flat?.flat_number ||
+        flats.find((f) => f.id === bill.flat_id)?.flat_number ||
+        "";
+      return !q || flatNo.toLowerCase().includes(q);
+    });
+  }, [pendingBills, flats, flatSearch]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -111,17 +117,16 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     return { totalExpected, totalCollected, totalPending, totalOverdue, paidFlats, pendingFlats };
   }, [filtered]);
 
+  function selectBillForPayment(bill: MaintenanceBill | null) {
+    setSelectedBill(bill);
+    setPayAmount(bill ? String(Number(bill.pending_amount)) : "");
+  }
+
   function openPay(bill?: MaintenanceBill) {
-    const target = bill || filtered.find((b) => b.status !== "paid") || null;
-    setSelectedBill(target);
-    payForm.reset({
-      bill_id: target?.id || "",
-      amount: Number(target?.pending_amount || 0),
-      payment_date: new Date().toISOString().slice(0, 10),
-      payment_mode: "upi",
-      reference_number: "",
-      notes: "",
-    });
+    const target = bill || pendingBills[0] || null;
+    selectBillForPayment(target);
+    setPaymentMode("upi");
+    setFlatSearch("");
     setPayOpen(true);
   }
 
@@ -138,9 +143,28 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     router.refresh();
   }
 
-  async function onPay(values: MaintenancePaymentInput) {
+  async function onPay() {
+    if (!selectedBill) {
+      toast.error("Please select a flat");
+      return;
+    }
+    const amount = Number(payAmount);
+    if (!amount || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (amount > Number(selectedBill.pending_amount)) {
+      toast.error("Amount cannot exceed pending amount");
+      return;
+    }
+
     setLoading(true);
-    const result = await addMaintenancePaymentAction(values);
+    const result = await addMaintenancePaymentAction({
+      bill_id: selectedBill.id,
+      amount,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_mode: paymentMode,
+    });
     setLoading(false);
     if (!result.success) {
       toast.error(result.message);
@@ -149,6 +173,10 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     toast.success(result.message);
     setPayOpen(false);
     router.refresh();
+  }
+
+  function getFlatNumber(bill: MaintenanceBill) {
+    return bill.flat?.flat_number || flats.find((f) => f.id === bill.flat_id)?.flat_number || "—";
   }
 
   const columns: Column<MaintenanceBill>[] = [
@@ -276,41 +304,139 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
         </form>
       </Modal>
 
-      <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Add Maintenance Payment">
-        <form className="space-y-4" onSubmit={payForm.handleSubmit(onPay)}>
-          <Select
-            label="Bill / Flat"
-            options={bills
-              .filter((b) => b.status !== "paid")
-              .map((b) => ({
-                value: b.id,
-                label: `${b.flat?.flat_number || flats.find((f) => f.id === b.flat_id)?.flat_number} • ${billingPeriodLabel(b.bill_month, b.bill_year, Number(b.period_months || 1))} • Pending ${formatCurrency(b.pending_amount)}`,
-              }))}
-            {...payForm.register("bill_id", {
-              onChange: (e) => {
-                const bill = bills.find((b) => b.id === e.target.value);
-                setSelectedBill(bill || null);
-                if (bill) payForm.setValue("amount", Number(bill.pending_amount));
-              },
-            })}
+      <Modal
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        title="Collect Payment"
+        description="Tick one flat, confirm amount, choose payment method."
+        size="lg"
+      >
+        <div className="space-y-5">
+          <SearchInput
+            value={flatSearch}
+            onChange={setFlatSearch}
+            placeholder="Search flat number..."
           />
+
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-2">
+            {pendingFlatOptions.length ? (
+              pendingFlatOptions.map((bill) => {
+                const selected = selectedBill?.id === bill.id;
+                return (
+                  <button
+                    key={bill.id}
+                    type="button"
+                    onClick={() => selectBillForPayment(bill)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
+                      selected
+                        ? "bg-primary/10 ring-2 ring-primary/30"
+                        : "hover:bg-slate-50",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border",
+                        selected
+                          ? "border-primary bg-primary text-white"
+                          : "border-slate-300 bg-white",
+                      )}
+                    >
+                      {selected ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-slate-900">
+                        {getFlatNumber(bill)}
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {billingPeriodLabel(
+                          bill.bill_month,
+                          bill.bill_year,
+                          Number(bill.period_months || 1),
+                        )}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold text-amber-700">
+                      {formatCurrency(bill.pending_amount)}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="px-3 py-8 text-center text-sm text-slate-500">
+                No pending flats. Generate bills first.
+              </p>
+            )}
+          </div>
+
           {selectedBill ? (
-            <p className="text-sm text-slate-500">
-              Pending amount: {formatCurrency(selectedBill.pending_amount)}
-            </p>
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Selected <strong className="text-slate-900">{getFlatNumber(selectedBill)}</strong>
+              {" · "}Pending{" "}
+              <strong className="text-slate-900">
+                {formatCurrency(selectedBill.pending_amount)}
+              </strong>
+            </div>
           ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Amount" type="number" step="0.01" {...payForm.register("amount")} />
-            <Input label="Payment Date" type="date" {...payForm.register("payment_date")} />
-            <Select label="Payment Mode" options={[...PAYMENT_MODES]} {...payForm.register("payment_mode")} />
-            <Input label="Reference Number" {...payForm.register("reference_number")} />
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <Input
+              label="Amount"
+              type="number"
+              step="0.01"
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
+              placeholder="Enter amount"
+            />
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={!selectedBill}
+                onClick={() =>
+                  selectedBill && setPayAmount(String(Number(selectedBill.pending_amount)))
+                }
+              >
+                Pay Full
+              </Button>
+            </div>
           </div>
-          <Textarea label="Notes" {...payForm.register("notes")} />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-700">Payment Method</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {PAYMENT_MODES.map((mode) => {
+                const active = paymentMode === mode.value;
+                return (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setPaymentMode(mode.value)}
+                    className={cn(
+                      "rounded-xl border px-3 py-3 text-sm font-medium transition",
+                      active
+                        ? "border-primary bg-primary text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-primary/40 hover:bg-primary/5",
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setPayOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={loading}>Record Payment</Button>
+            <Button type="button" variant="outline" onClick={() => setPayOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" loading={loading} onClick={onPay} disabled={!selectedBill}>
+              <Wallet className="h-4 w-4" />
+              Collect Payment
+            </Button>
           </div>
-        </form>
+        </div>
       </Modal>
     </div>
   );
