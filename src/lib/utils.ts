@@ -37,6 +37,16 @@ export function monthLabel(month: number) {
   return new Date(2000, month - 1, 1).toLocaleString("en-IN", { month: "short" });
 }
 
+/** Returns label for a billing period starting at month/year covering periodMonths. */
+export function billingPeriodLabel(month: number, year: number, periodMonths = 1) {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month - 1 + periodMonths - 1, 1);
+  const startText = start.toLocaleString("en-IN", { month: "short", year: "numeric" });
+  if (periodMonths <= 1) return startText;
+  const endText = end.toLocaleString("en-IN", { month: "short", year: "numeric" });
+  return `${startText} – ${endText}`;
+}
+
 export function getErrorMessage(error: unknown, fallback = "Something went wrong") {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;

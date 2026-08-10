@@ -16,8 +16,10 @@ import {
   saveMaintenanceSettingsAction,
   saveSocietySettingsAction,
 } from "@/lib/actions/settings";
+import { BILLING_FREQUENCIES, billingFrequencyLabel } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 interface SettingsFormsProps {
@@ -49,14 +51,19 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     },
   });
 
+  const frequency = Number(maintenance?.billing_frequency_months || 1);
+
   const maintenanceForm = useForm<MaintenanceSettingsInput>({
     resolver: zodResolver(maintenanceSettingsSchema),
     defaultValues: {
+      billing_frequency_months: frequency,
       default_amount: Number(maintenance?.default_amount || 1500),
       due_day: Number(maintenance?.due_day || 10),
       late_fee: Number(maintenance?.late_fee || 100),
     },
   });
+
+  const watchedFrequency = Number(maintenanceForm.watch("billing_frequency_months") || 1);
 
   async function onSaveSociety(values: SocietySettingsInput) {
     setSavingSociety(true);
@@ -116,12 +123,32 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
       <Card>
         <CardHeader
           title="Maintenance Settings"
-          description="Defaults used when generating monthly maintenance bills."
+          description="Set how often maintenance is charged: monthly, every 3 months, or every 6 months."
         />
         <CardContent>
           <form className="space-y-4" onSubmit={maintenanceForm.handleSubmit(onSaveMaintenance)}>
+            <Select
+              label="Billing Frequency"
+              options={[...BILLING_FREQUENCIES]}
+              error={maintenanceForm.formState.errors.billing_frequency_months?.message}
+              {...maintenanceForm.register("billing_frequency_months")}
+            />
+            <p className="text-sm text-slate-500">
+              Selected: <span className="font-medium text-slate-700">{billingFrequencyLabel(watchedFrequency)}</span>.
+              Amount below is for one full billing period (not per month).
+            </p>
             <div className="grid gap-4 sm:grid-cols-3">
-              <Input label="Default Maintenance Amount" type="number" {...maintenanceForm.register("default_amount")} />
+              <Input
+                label={
+                  watchedFrequency === 3
+                    ? "Amount (for 3 months)"
+                    : watchedFrequency === 6
+                      ? "Amount (for 6 months)"
+                      : "Amount (for 1 month)"
+                }
+                type="number"
+                {...maintenanceForm.register("default_amount")}
+              />
               <Input label="Due Day (1-28)" type="number" {...maintenanceForm.register("due_day")} />
               <Input label="Late Fee" type="number" {...maintenanceForm.register("late_fee")} />
             </div>

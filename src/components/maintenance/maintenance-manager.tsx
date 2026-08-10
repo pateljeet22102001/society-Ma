@@ -17,8 +17,15 @@ import {
   addMaintenancePaymentAction,
   generateMaintenanceBillsAction,
 } from "@/lib/actions/maintenance";
-import { MAINTENANCE_STATUSES, MONTHS, PAGE_SIZE, PAYMENT_MODES } from "@/lib/constants";
-import { formatCurrency, formatDate, monthLabel } from "@/lib/utils";
+import {
+  BILLING_FREQUENCIES,
+  billingFrequencyLabel,
+  MAINTENANCE_STATUSES,
+  MONTHS,
+  PAGE_SIZE,
+  PAYMENT_MODES,
+} from "@/lib/constants";
+import { billingPeriodLabel, formatCurrency, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -52,6 +59,8 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [payOpen, setPayOpen] = useState(searchParams.get("pay") === "1");
   const [selectedBill, setSelectedBill] = useState<MaintenanceBill | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const frequencyMonths = Number(settings?.billing_frequency_months || 1);
 
   const generateForm = useForm<GenerateMaintenanceInput>({
     resolver: zodResolver(generateMaintenanceSchema),
@@ -150,8 +159,9 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     },
     {
       key: "period",
-      header: "Month / Year",
-      render: (row) => `${monthLabel(row.bill_month)} ${row.bill_year}`,
+      header: "Billing Period",
+      render: (row) =>
+        billingPeriodLabel(row.bill_month, row.bill_year, Number(row.period_months || 1)),
     },
     { key: "amount", header: "Maintenance", render: (row) => formatCurrency(row.maintenance_amount) },
     { key: "outstanding", header: "Prev. Outstanding", render: (row) => formatCurrency(row.previous_outstanding) },
@@ -180,7 +190,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
       <Card>
         <CardHeader
           title="Maintenance Bills"
-          description="Generate monthly bills and record full or partial payments."
+          description={`Current cycle: ${billingFrequencyLabel(frequencyMonths)}. Generate bills and record full or partial payments.`}
           action={
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setGenerateOpen(true)}>
@@ -229,12 +239,36 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
 
       <Modal open={generateOpen} onClose={() => setGenerateOpen(false)} title="Generate Maintenance Bills">
         <form className="space-y-4" onSubmit={generateForm.handleSubmit(onGenerate)}>
+          <div className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            Billing frequency: <strong>{billingFrequencyLabel(frequencyMonths)}</strong>
+            {frequencyMonths > 1
+              ? ". Choose the starting month of the period (example: Apr for Apr–Jun)."
+              : ". Choose the billing month."}
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Select label="Month" options={[...MONTHS]} {...generateForm.register("bill_month")} />
+            <Select
+              label={frequencyMonths > 1 ? "Period Start Month" : "Month"}
+              options={[...MONTHS]}
+              {...generateForm.register("bill_month")}
+            />
             <Input label="Year" type="number" {...generateForm.register("bill_year")} />
-            <Input label="Maintenance Amount" type="number" {...generateForm.register("amount")} />
+            <Input
+              label={
+                frequencyMonths === 3
+                  ? "Amount (for 3 months)"
+                  : frequencyMonths === 6
+                    ? "Amount (for 6 months)"
+                    : "Amount (for 1 month)"
+              }
+              type="number"
+              {...generateForm.register("amount")}
+            />
             <Input label="Late Fee" type="number" {...generateForm.register("late_fee")} />
           </div>
+          <p className="text-xs text-slate-500">
+            Change frequency anytime in Settings → Maintenance Settings:{" "}
+            {BILLING_FREQUENCIES.map((f) => f.label).join(" / ")}
+          </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
             <Button type="submit" loading={loading}>Generate</Button>
@@ -250,7 +284,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
               .filter((b) => b.status !== "paid")
               .map((b) => ({
                 value: b.id,
-                label: `${b.flat?.flat_number || flats.find((f) => f.id === b.flat_id)?.flat_number} • ${monthLabel(b.bill_month)} ${b.bill_year} • Pending ${formatCurrency(b.pending_amount)}`,
+                label: `${b.flat?.flat_number || flats.find((f) => f.id === b.flat_id)?.flat_number} • ${billingPeriodLabel(b.bill_month, b.bill_year, Number(b.period_months || 1))} • Pending ${formatCurrency(b.pending_amount)}`,
               }))}
             {...payForm.register("bill_id", {
               onChange: (e) => {

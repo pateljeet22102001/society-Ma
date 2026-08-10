@@ -50,6 +50,7 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
         default_amount: 1500,
         due_day: 10,
         late_fee: 100,
+        billing_frequency_months: 1,
         created_by: user?.id ?? null,
       });
     }

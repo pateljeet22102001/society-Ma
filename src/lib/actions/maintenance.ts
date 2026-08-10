@@ -41,6 +41,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
     const amount = parsed.data.amount;
     const lateFeeDefault = parsed.data.late_fee ?? settings?.late_fee ?? 0;
     const dueDay = settings?.due_day ?? 10;
+    const periodMonths = Number(settings?.billing_frequency_months || 1) as 1 | 3 | 6;
 
     const { data: flats, error: flatsError } = await supabase
       .from("flats")
@@ -77,6 +78,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
         flat_id: flat.id,
         bill_month: parsed.data.bill_month,
         bill_year: parsed.data.bill_year,
+        period_months: periodMonths,
         maintenance_amount: amount,
         previous_outstanding: previousOutstanding,
         late_fee: lateFeeDefault,
@@ -85,6 +87,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
         pending_amount: total,
         due_date: dueDate,
         status: "pending" as const,
+        notes: periodMonths > 1 ? `Covers ${periodMonths} months` : null,
         created_by: user?.id ?? null,
       });
     }
@@ -100,7 +103,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
     revalidatePath("/dashboard");
     return {
       success: true,
-      message: `Generated maintenance for ${bills.length} flats`,
+      message: `Generated ${periodMonths}-month maintenance for ${bills.length} flats`,
     };
   } catch (error) {
     return {

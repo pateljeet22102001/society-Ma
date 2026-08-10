@@ -123,12 +123,15 @@ export interface ExpenseTransaction {
   category?: ExpenseCategory | null;
 }
 
+export type BillingFrequencyMonths = 1 | 3 | 6;
+
 export interface MaintenanceSettings {
   id: string;
   society_id: string;
   default_amount: number;
   due_day: number;
   late_fee: number;
+  billing_frequency_months: BillingFrequencyMonths;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -140,6 +143,7 @@ export interface MaintenanceBill {
   flat_id: string;
   bill_month: number;
   bill_year: number;
+  period_months: BillingFrequencyMonths;
   maintenance_amount: number;
   previous_outstanding: number;
   late_fee: number;
