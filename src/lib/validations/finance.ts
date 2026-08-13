@@ -12,6 +12,12 @@ export const incomeSchema = z.object({
   receipt_number: z.string().optional(),
 });
 
+export const incomeCategorySchema = z.object({
+  name: z.string().trim().min(2, "Category name is required").max(80),
+});
+
+export type IncomeCategoryInput = z.infer<typeof incomeCategorySchema>;
+
 export const expenseSchema = z.object({
   transaction_date: z.string().min(1, "Date is required"),
   category_id: z.string().uuid("Select a category"),

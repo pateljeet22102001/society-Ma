@@ -3,10 +3,33 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, requireSociety } from "@/lib/society";
-import { incomeSchema } from "@/lib/validations/finance";
+import { incomeCategorySchema, incomeSchema } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
 
 export type ActionResult = { success: boolean; message?: string };
+
+function categorySlug(name: string) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+export async function createIncomeCategoryAction(input: unknown): Promise<ActionResult> {
+  const parsed = incomeCategorySchema.safeParse(input);
+  if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message };
+  try {
+    const supabase = await createClient();
+    const society = await requireSociety();
+    const slug = categorySlug(parsed.data.name);
+    if (!slug) return { success: false, message: "Enter a valid category name" };
+    const { data: existing } = await supabase.from("income_categories").select("id").or(`society_id.is.null,society_id.eq.${society.id}`).eq("slug", slug).limit(1).maybeSingle();
+    if (existing) return { success: false, message: "This category already exists" };
+    const { error } = await supabase.from("income_categories").insert({ society_id: society.id, name: parsed.data.name.trim(), slug, is_system: false, status: "active" });
+    if (error) throw error;
+    revalidatePath("/income");
+    return { success: true, message: "Income category added" };
+  } catch (error) {
+    return { success: false, message: getErrorMessage(error, "Failed to add category") };
+  }
+}
 
 export async function createIncomeAction(input: unknown): Promise<ActionResult> {
   const parsed = incomeSchema.safeParse(input);

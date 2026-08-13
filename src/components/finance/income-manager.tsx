@@ -7,8 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Flat, IncomeCategory, IncomeTransaction } from "@/types/database";
-import { incomeSchema, type IncomeInput } from "@/lib/validations/finance";
-import { createIncomeAction, deleteIncomeAction, updateIncomeAction } from "@/lib/actions/income";
+import { incomeCategorySchema, incomeSchema, type IncomeCategoryInput, type IncomeInput } from "@/lib/validations/finance";
+import { createIncomeAction, createIncomeCategoryAction, deleteIncomeAction, updateIncomeAction } from "@/lib/actions/income";
 import { PAGE_SIZE, PAYMENT_MODES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
   const [editing, setEditing] = useState<IncomeTransaction | null>(null);
   const [deleting, setDeleting] = useState<IncomeTransaction | null>(null);
   const [loading, setLoading] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
 
   const form = useForm<IncomeInput>({
     resolver: zodResolver(incomeSchema),
@@ -49,6 +50,13 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
       amount: 0,
     },
   });
+  const categoryForm = useForm<IncomeCategoryInput>({ resolver: zodResolver(incomeCategorySchema), defaultValues: { name: "" } });
+
+  async function onAddCategory(values: IncomeCategoryInput) {
+    setLoading(true); const result = await createIncomeCategoryAction(values); setLoading(false);
+    if (!result.success) { toast.error(result.message); return; }
+    toast.success(result.message); categoryForm.reset(); setCategoryOpen(false); router.refresh();
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -169,10 +177,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
           />
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Add Income
-          </Button>
+          <div className="flex gap-2"><Button variant="outline" onClick={() => setCategoryOpen(true)}><Plus className="h-4 w-4" />Category</Button><Button onClick={openCreate} disabled={!categories.length}><Plus className="h-4 w-4" />Add Income</Button></div>
         </div>
         <DataTable
           columns={columns}
@@ -210,6 +215,13 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" loading={loading}>{editing ? "Save Changes" : "Add Income"}</Button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal open={categoryOpen} onClose={() => setCategoryOpen(false)} title="Add Income Category" description="Create a reusable Aavak category for this society.">
+        <form className="space-y-4" onSubmit={categoryForm.handleSubmit(onAddCategory)}>
+          <Input label="Category Name" placeholder="Example: Flat Transfer Fee" error={categoryForm.formState.errors.name?.message} {...categoryForm.register("name")} />
+          <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCategoryOpen(false)}>Cancel</Button><Button type="submit" loading={loading}>Add Category</Button></div>
         </form>
       </Modal>
 
