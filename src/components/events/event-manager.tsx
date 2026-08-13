@@ -42,7 +42,7 @@ export function EventManager({ events, flatContributions, aavak, expenses }: Pro
     const javak = outgo.reduce((s, x) => s + Number(x.amount), 0);
     return { expected, flatPaid, pending, cashAavak, itemValue, javak, balance: flatPaid + cashAavak - javak };
   }, [rows, income, outgo]);
-  async function run(action: Promise<{success:boolean;message?:string}>, close = true) { setLoading(true); const r = await action; setLoading(false); r.success ? toast.success(r.message) : toast.error(r.message); if (r.success) { if (close) setModal(null); router.refresh(); } }
+  async function run(action: Promise<{success:boolean;message?:string}>, close = true) { setLoading(true); const r = await action; setLoading(false); if (r.success) toast.success(r.message); else toast.error(r.message); if (r.success) { if (close) setModal(null); router.refresh(); } }
   function formData(form: HTMLFormElement) { return Object.fromEntries(new FormData(form)); }
 
   return <div className="space-y-5">
