@@ -29,7 +29,7 @@ export function CardHeader({
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">{action}</div> : null}
     </div>
   );
 }

@@ -42,12 +42,12 @@ export function DataTable<T>({
             className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
           >
             <div className="space-y-2.5">
-              {columns.map((column) => (
-                <div key={column.key} className="flex items-start justify-between gap-3">
-                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+              {columns.filter((column) => !column.hideOnMobile).map((column) => (
+                <div key={column.key} className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="max-w-[42%] shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
                     {column.mobileLabel || column.header}
                   </span>
-                  <div className="text-right text-sm text-slate-800">{column.render(row)}</div>
+                  <div className="min-w-0 break-words text-right text-sm text-slate-800">{column.render(row)}</div>
                 </div>
               ))}
             </div>

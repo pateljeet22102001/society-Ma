@@ -51,7 +51,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl",
+          "relative z-10 flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[92dvh] sm:rounded-2xl",
           size === "md" && "sm:max-w-lg",
           size === "lg" && "sm:max-w-2xl",
           size === "xl" && "sm:max-w-4xl",
@@ -67,7 +67,7 @@ export function Modal({
             <X className="h-5 w-5" />
           </Button>
         </div>
-        <div className="overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div className="overscroll-contain overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-4">{children}</div>
       </div>
     </div>
   );

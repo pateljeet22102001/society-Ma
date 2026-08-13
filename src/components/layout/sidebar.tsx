@@ -54,7 +54,7 @@ export function Sidebar({ open, collapsed, onClose, societyName }: SidebarProps)
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-slate-200 bg-white transition-transform duration-300 lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(280px,calc(100vw-24px))] flex-col border-r border-slate-200 bg-white transition-transform duration-300 lg:static lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
           collapsed ? "lg:w-[88px]" : "lg:w-[260px]",
         )}
