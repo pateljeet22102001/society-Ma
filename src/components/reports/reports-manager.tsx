@@ -8,9 +8,13 @@ import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-type IncomeRow = { transaction_date: string; amount: number; person_name: string | null; payment_mode: string; reference_number: string | null; description: string | null; receipt_number: string | null; category: { name: string } | null; flat: { flat_number: string } | null };
+type IncomeRow = { transaction_date: string; amount: number; person_name: string | null; payment_mode: string; reference_number: string | null; description: string | null; receipt_number: string | null; category: { name: string; slug: string } | null; flat: { flat_number: string } | null };
 type ExpenseRow = { transaction_date: string; amount: number; vendor_name: string | null; payment_mode: string; reference_number: string | null; description: string | null; bill_number: string | null; category: { name: string } | null };
 type MaintenanceRow = { bill_month: number; bill_year: number; period_months: number; total_amount: number; paid_amount: number; pending_amount: number; status: string; due_date: string | null; payment_date: string | null; flat: { flat_number: string; owner_name: string | null; wing: { name: string } | null } | null };
+type CashPayment = { payment_date: string; amount: number; payment_mode: string; reference_number: string | null; flat: { flat_number: string } | null; event_id?: string };
+type EventInfo = { id: string; name: string; event_year: number };
+type EventAavak = { event_id: string; contribution_type: "money" | "item"; category: string; donor_name: string | null; amount: number | null; item_name: string | null; quantity: number | null; unit: string | null; total_value: number; contribution_date: string; payment_mode: string | null; reference_number: string | null };
+type EventExpenseRow = { event_id: string; category: string; vendor_name: string | null; amount: number; expense_date: string; payment_mode: string; reference_number: string | null };
 type ReportKey = "income" | "expense" | "maintenance" | "pending" | "monthly" | "yearly";
 type ExportReport = { title: string; subtitle: string; headers: string[]; rows: (string | number)[][]; totalLabel: string; total: number };
 
@@ -20,33 +24,48 @@ const amount = (value: number) => Number(value || 0).toFixed(2);
 const safeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const xmlText = (value: string | number) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-export function ReportsManager({ society, income, expenses, maintenance }: { society: Society | null; income: IncomeRow[]; expenses: ExpenseRow[]; maintenance: MaintenanceRow[] }) {
+export function ReportsManager({ society, income, expenses, maintenance, maintenancePayments, events, eventFlatPayments, eventAavak, eventExpenses }: { society: Society | null; income: IncomeRow[]; expenses: ExpenseRow[]; maintenance: MaintenanceRow[]; maintenancePayments: CashPayment[]; events: EventInfo[]; eventFlatPayments: CashPayment[]; eventAavak: EventAavak[]; eventExpenses: EventExpenseRow[] }) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const year = new Date().getFullYear();
-  const incomeTotal = income.reduce((sum, row) => sum + Number(row.amount), 0);
-  const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount), 0);
+  const regularIncome = income.filter((row) => row.category?.slug !== "maintenance");
+  const moneyAavak = eventAavak.filter((row) => row.contribution_type === "money");
+  const itemAavak = eventAavak.filter((row) => row.contribution_type === "item");
+  const incomeTotal = regularIncome.reduce((sum, row) => sum + Number(row.amount), 0) + maintenancePayments.reduce((sum, row) => sum + Number(row.amount), 0) + eventFlatPayments.reduce((sum, row) => sum + Number(row.amount), 0) + moneyAavak.reduce((sum, row) => sum + Number(row.amount), 0);
+  const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount), 0) + eventExpenses.reduce((sum, row) => sum + Number(row.amount), 0);
   const yearBills = maintenance.filter((row) => Number(row.bill_year) === year);
-  const collected = yearBills.reduce((sum, row) => sum + Number(row.paid_amount), 0);
+  const collected = maintenancePayments.filter((row) => new Date(`${row.payment_date}T00:00:00`).getFullYear() === year).reduce((sum, row) => sum + Number(row.amount), 0);
   const pending = yearBills.reduce((sum, row) => sum + Number(row.pending_amount), 0);
+  const eventName = (id?: string) => events.find((event) => event.id === id)?.name || "Event";
 
   function makeReport(key: ReportKey): ExportReport {
-    if (key === "income") return { title: "Income Report", subtitle: "All-time income transactions", headers: ["Date", "Category", "Person", "Flat", "Mode", "Receipt / Ref", "Description", "Amount (INR)"], rows: income.map((r) => [dateText(r.transaction_date), r.category?.name || "-", r.person_name || "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.receipt_number || r.reference_number || "-", r.description || "-", amount(r.amount)]), totalLabel: "Total Income", total: incomeTotal };
-    if (key === "expense") return { title: "Expense Report", subtitle: "All-time expense transactions", headers: ["Date", "Category", "Vendor", "Mode", "Bill / Ref", "Description", "Amount (INR)"], rows: expenses.map((r) => [dateText(r.transaction_date), r.category?.name || "-", r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", r.description || "-", amount(r.amount)]), totalLabel: "Total Expense", total: expenseTotal };
+    if (key === "income") {
+      const rows = [
+        ...regularIncome.map((r) => [dateText(r.transaction_date), "Regular Aavak", r.category?.name || "-", r.person_name || "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.receipt_number || r.reference_number || "-", amount(r.amount)]),
+        ...maintenancePayments.map((r) => [dateText(r.payment_date), "Maintenance", "Maintenance payment", "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
+        ...eventFlatPayments.map((r) => [dateText(r.payment_date), "Event flat contribution", eventName(r.event_id), "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
+        ...moneyAavak.map((r) => [dateText(r.contribution_date), "Event cash Aavak", `${eventName(r.event_id)} - ${r.category}`, r.donor_name || "-", "-", r.payment_mode?.replaceAll("_", " ") || "-", r.reference_number || "-", amount(Number(r.amount))]),
+      ].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
+      return { title: "Complete Aavak Report", subtitle: "Regular income, maintenance, and event cash received (without duplication)", headers: ["Date", "Source", "Category / Event", "Person", "Flat", "Mode", "Receipt / Ref", "Amount (INR)"], rows, totalLabel: "Total Cash Aavak", total: incomeTotal };
+    }
+    if (key === "expense") {
+      const rows = [...expenses.map((r) => [dateText(r.transaction_date), "Regular Javak", r.category?.name || "-", r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", amount(r.amount)]), ...eventExpenses.map((r) => [dateText(r.expense_date), "Event Javak", `${eventName(r.event_id)} - ${r.category}`, r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)])];
+      return { title: "Complete Javak Report", subtitle: "Regular society and event expenses", headers: ["Date", "Source", "Category / Event", "Vendor", "Mode", "Bill / Ref", "Amount (INR)"], rows, totalLabel: "Total Cash Javak", total: expenseTotal };
+    }
     if (key === "maintenance" || key === "pending") {
       const source = key === "pending" ? yearBills.filter((r) => Number(r.pending_amount) > 0) : yearBills.filter((r) => Number(r.paid_amount) > 0);
       return { title: key === "pending" ? "Pending Maintenance Report" : "Maintenance Collection Report", subtitle: `${year} flat-wise maintenance`, headers: ["Flat", "Owner", "Wing", "Period", "Due", "Paid Date", "Status", "Total", "Paid", "Pending"], rows: source.map((r) => [r.flat?.flat_number || "-", r.flat?.owner_name || "-", r.flat?.wing?.name || "-", `${monthName(r.bill_month)} ${r.bill_year}${r.period_months > 1 ? ` (${r.period_months} months)` : ""}`, dateText(r.due_date), dateText(r.payment_date), r.status.replaceAll("_", " "), amount(r.total_amount), amount(r.paid_amount), amount(r.pending_amount)]), totalLabel: key === "pending" ? "Total Pending" : "Total Collected", total: key === "pending" ? pending : collected };
     }
-    const periods = new Map<string, { label: string; income: number; expense: number }>();
+    const periods = new Map<string, { label: string; regularIncome: number; maintenance: number; eventIncome: number; regularExpense: number; eventExpense: number; itemValue: number }>();
     const monthly = key === "monthly";
-    const add = (date: string, field: "income" | "expense", value: number) => {
+    const add = (date: string, field: "regularIncome" | "maintenance" | "eventIncome" | "regularExpense" | "eventExpense" | "itemValue", value: number) => {
       const d = new Date(`${date}T00:00:00`); if (monthly && d.getFullYear() !== year) return;
       const periodKey = monthly ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : String(d.getFullYear());
       const label = monthly ? d.toLocaleString("en-IN", { month: "long", year: "numeric" }) : String(d.getFullYear());
-      const current = periods.get(periodKey) || { label, income: 0, expense: 0 }; current[field] += Number(value); periods.set(periodKey, current);
+      const current = periods.get(periodKey) || { label, regularIncome: 0, maintenance: 0, eventIncome: 0, regularExpense: 0, eventExpense: 0, itemValue: 0 }; current[field] += Number(value); periods.set(periodKey, current);
     };
-    income.forEach((r) => add(r.transaction_date, "income", r.amount)); expenses.forEach((r) => add(r.transaction_date, "expense", r.amount));
-    const rows = [...periods.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([, r]) => [r.label, amount(r.income), amount(r.expense), amount(r.income - r.expense)]);
-    return { title: monthly ? "Monthly Financial Summary" : "Yearly Financial Summary", subtitle: monthly ? `${year} income, expense, and balance` : "Year-wise income, expense, and balance", headers: [monthly ? "Month" : "Year", "Income (INR)", "Expense (INR)", "Balance (INR)"], rows, totalLabel: "Current Balance", total: incomeTotal - expenseTotal };
+    regularIncome.forEach((r) => add(r.transaction_date, "regularIncome", r.amount)); maintenancePayments.forEach((r) => add(r.payment_date, "maintenance", r.amount)); eventFlatPayments.forEach((r) => add(r.payment_date, "eventIncome", r.amount)); moneyAavak.forEach((r) => add(r.contribution_date, "eventIncome", Number(r.amount))); itemAavak.forEach((r) => add(r.contribution_date, "itemValue", r.total_value)); expenses.forEach((r) => add(r.transaction_date, "regularExpense", r.amount)); eventExpenses.forEach((r) => add(r.expense_date, "eventExpense", r.amount));
+    const rows = [...periods.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([, r]) => { const cashIncome = r.regularIncome + r.maintenance + r.eventIncome; const cashExpense = r.regularExpense + r.eventExpense; return [r.label, amount(r.regularIncome), amount(r.maintenance), amount(r.eventIncome), amount(cashIncome), amount(r.regularExpense), amount(r.eventExpense), amount(cashExpense), amount(cashIncome - cashExpense), amount(r.itemValue)]; });
+    return { title: monthly ? "Complete Monthly Society Hisab" : "Complete Yearly Society Hisab", subtitle: monthly ? `${year} complete cash flow and donated-item value` : "Year-wise regular, maintenance, event, and donated-item accounting", headers: [monthly ? "Month" : "Year", "Regular Aavak", "Maintenance", "Event Aavak", "Total Aavak", "Regular Javak", "Event Javak", "Total Javak", "Cash Balance", "Item Value"], rows, totalLabel: "Available Cash Balance", total: incomeTotal - expenseTotal };
   }
 
   async function downloadPdf(key: ReportKey) {
