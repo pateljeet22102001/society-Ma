@@ -7,9 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ExpenseCategory, ExpenseTransaction } from "@/types/database";
-import { expenseSchema, type ExpenseInput } from "@/lib/validations/finance";
+import { expenseCategorySchema, expenseSchema, type ExpenseCategoryInput, type ExpenseInput } from "@/lib/validations/finance";
 import {
   createExpenseAction,
+  createExpenseCategoryAction,
   deleteExpenseAction,
   updateExpenseAction,
 } from "@/lib/actions/expenses";
@@ -42,6 +43,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
   const [editing, setEditing] = useState<ExpenseTransaction | null>(null);
   const [deleting, setDeleting] = useState<ExpenseTransaction | null>(null);
   const [loading, setLoading] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
 
   const form = useForm<ExpenseInput>({
     resolver: zodResolver(expenseSchema),
@@ -52,6 +54,13 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
       amount: 0,
     },
   });
+  const categoryForm = useForm<ExpenseCategoryInput>({ resolver: zodResolver(expenseCategorySchema), defaultValues: { name: "" } });
+
+  async function onAddCategory(values: ExpenseCategoryInput) {
+    setLoading(true); const result = await createExpenseCategoryAction(values); setLoading(false);
+    if (!result.success) { toast.error(result.message); return; }
+    toast.success(result.message); categoryForm.reset(); setCategoryOpen(false); router.refresh();
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -172,10 +181,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
           />
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Add Expense
-          </Button>
+          <div className="flex gap-2"><Button variant="outline" onClick={() => setCategoryOpen(true)}><Plus className="h-4 w-4" />Category</Button><Button onClick={openCreate} disabled={!categories.length}><Plus className="h-4 w-4" />Add Expense</Button></div>
         </div>
         <DataTable
           columns={columns}
@@ -213,6 +219,13 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" loading={loading}>{editing ? "Save Changes" : "Add Expense"}</Button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal open={categoryOpen} onClose={() => setCategoryOpen(false)} title="Add Expense Category" description="Create a reusable Javak category for this society.">
+        <form className="space-y-4" onSubmit={categoryForm.handleSubmit(onAddCategory)}>
+          <Input label="Category Name" placeholder="Example: Building Repair" error={categoryForm.formState.errors.name?.message} {...categoryForm.register("name")} />
+          <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCategoryOpen(false)}>Cancel</Button><Button type="submit" loading={loading}>Add Category</Button></div>
         </form>
       </Modal>
 

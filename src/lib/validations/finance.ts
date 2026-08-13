@@ -30,6 +30,12 @@ export const expenseSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const expenseCategorySchema = z.object({
+  name: z.string().trim().min(2, "Category name is required").max(80),
+});
+
+export type ExpenseCategoryInput = z.infer<typeof expenseCategorySchema>;
+
 export const generateMaintenanceSchema = z.object({
   bill_month: z.coerce.number().int().min(1).max(12),
   bill_year: z.coerce.number().int().min(2000),
