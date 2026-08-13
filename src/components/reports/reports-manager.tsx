@@ -26,7 +26,9 @@ type ReportFilters = { period: "financial_year" | "custom" | "all_time"; financi
 
 const monthName = (month: number) => new Date(2000, month - 1).toLocaleString("en-IN", { month: "short" });
 const dateText = (date?: string | null) => date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-IN") : "-";
-const amount = (value: number) => Number(value || 0).toFixed(2);
+const amount = (value: number) => Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const isSummaryRow = (row: (string | number)[]) => row.some((cell) => String(cell).toUpperCase() === "SUMMARY");
+const reportPeriod = (period: ReportFilters["period"], label: string, from: string, to: string) => period === "all_time" ? "All-time records" : period === "custom" ? `${dateText(from)} to ${dateText(to)}` : `Financial Year ${label}`;
 const safeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const xmlText = (value: string | number) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
@@ -158,11 +160,54 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
     setDownloading(`${key}-pdf`);
     try {
       const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-      const report = preparedReport(key); const doc = new jsPDF({ orientation: report.headers.length > 7 ? "landscape" : "portrait", unit: "mm", format: "a4" });
-      doc.setFillColor(29, 78, 216); doc.rect(0, 0, doc.internal.pageSize.getWidth(), 28, "F"); doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.text(society?.name || "Society Management", 14, 12);
-      doc.setFontSize(10); doc.text([society?.address, society?.city, society?.state].filter(Boolean).join(", ") || "Society financial report", 14, 20); doc.setTextColor(15, 23, 42); doc.setFontSize(16); doc.text(report.title, 14, 39);
-      doc.setFontSize(9); doc.setTextColor(100, 116, 139); doc.text(`${report.subtitle} | Generated: ${new Date().toLocaleString("en-IN")}`, 14, 46, { maxWidth: doc.internal.pageSize.getWidth() - 28 }); doc.setTextColor(15, 23, 42); doc.setFontSize(12); doc.text(`${report.totalLabel}: INR ${amount(report.total)}`, 14, 55);
-      autoTable(doc, { startY: 61, head: [report.headers], body: report.rows.length ? report.rows : [["No records available", ...report.headers.slice(1).map(() => "")]], theme: "grid", styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" }, headStyles: { fillColor: [29, 78, 216], textColor: 255 }, alternateRowStyles: { fillColor: [248, 250, 252] }, didDrawPage: ({ pageNumber }) => { doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.text(`Page ${pageNumber}`, doc.internal.pageSize.getWidth() - 24, doc.internal.pageSize.getHeight() - 7); } });
+      const report = preparedReport(key);
+      const orientation = report.headers.length > 7 ? "landscape" : "portrait";
+      const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+      const address = [society?.address, society?.city, society?.state, society?.pin_code].filter(Boolean).join(", ") || "Society financial report";
+      const generated = new Date().toLocaleString("en-IN");
+      const period = reportPeriod(filters.period, financialYearLabel, financialYearFrom, financialYearTo);
+      const summaryRows = report.rows.filter(isSummaryRow);
+      const detailRows = report.rows.filter((row) => !isSummaryRow(row));
+      const drawPageFrame = () => {
+        doc.setFillColor(29, 78, 216); doc.rect(0, 0, pageWidth, 24, "F");
+        doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.text(society?.name || "Society Management", margin, 10);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.text(address, margin, 17, { maxWidth: pageWidth - margin * 2 });
+        doc.setDrawColor(226, 232, 240); doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+      };
+      drawPageFrame();
+      doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text(report.title, margin, 35);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); doc.text(`${period}  |  Generated ${generated}`, margin, 42);
+      doc.setFillColor(239, 246, 255); doc.roundedRect(margin, 48, pageWidth - margin * 2, 18, 2, 2, "F");
+      doc.setTextColor(30, 64, 175); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(report.totalLabel.toUpperCase(), margin + 5, 55);
+      doc.setTextColor(report.total < 0 ? 190 : 15, report.total < 0 ? 24 : 23, report.total < 0 ? 93 : 42); doc.setFontSize(15); doc.text(`INR ${amount(report.total)}`, margin + 5, 62);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(71, 85, 105); doc.text("UNAUDITED - subject to verification by the society accountant / auditor", pageWidth - margin - 5, 59, { align: "right" });
+
+      let cursorY = 74;
+      const tableBase = {
+        theme: "grid" as const,
+        margin: { left: margin, right: margin, top: 30, bottom: 18 },
+        styles: { fontSize: orientation === "landscape" ? 7.2 : 8, cellPadding: 2.2, overflow: "linebreak" as const, textColor: [30, 41, 59] as [number, number, number], lineColor: [226, 232, 240] as [number, number, number], lineWidth: 0.15 },
+        headStyles: { fillColor: [29, 78, 216] as [number, number, number], textColor: 255, fontStyle: "bold" as const, halign: "left" as const },
+        alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
+        didDrawPage: ({ pageNumber }: { pageNumber: number }) => { drawPageFrame(); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.text(`Page ${pageNumber}`, pageWidth - margin, pageHeight - 6, { align: "right" }); doc.text("Confidential society record", margin, pageHeight - 6); },
+      };
+      if (summaryRows.length) {
+        doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Summary", margin, cursorY);
+        autoTable(doc, { ...tableBase, startY: cursorY + 3, head: [report.headers], body: summaryRows });
+        cursorY = ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 9;
+      }
+      if (filters.detail === "detailed") {
+        if (cursorY > pageHeight - 45) { doc.addPage(); cursorY = 34; }
+        doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(summaryRows.length ? "Detailed Records" : "Records", margin, cursorY);
+        autoTable(doc, { ...tableBase, startY: cursorY + 3, head: [report.headers], body: detailRows.length ? detailRows : [["No detailed records available", ...report.headers.slice(1).map(() => "")]] });
+      }
+      let finalY = ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 12;
+      if (finalY > pageHeight - 38) { doc.addPage(); drawPageFrame(); finalY = 40; }
+      doc.setDrawColor(148, 163, 184); doc.line(margin, finalY + 14, margin + 48, finalY + 14); doc.line(pageWidth - margin - 48, finalY + 14, pageWidth - margin, finalY + 14);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(71, 85, 105); doc.text("Treasurer / Authorized Signatory", margin, finalY + 19); doc.text("Secretary / Chairman", pageWidth - margin, finalY + 19, { align: "right" });
       doc.save(`${safeName(society?.name || "society")}-${safeName(report.title)}-${new Date().toISOString().slice(0, 10)}.pdf`); toast.success("PDF downloaded");
     } catch { toast.error("Could not generate PDF"); } finally { setDownloading(null); }
   }
@@ -178,8 +223,14 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
         const titleRows = includeTitle ? `${rowXml([society?.name || "Society Management"], "SocietyTitle")}${rowXml([report.title], "ReportTitle")}${rowXml([report.subtitle], "Subtitle")}${rowXml([`Generated: ${new Date().toLocaleString("en-IN")}`], "Subtitle")}${rowXml([`${report.totalLabel}: INR ${amount(report.total)}`], "Total")}<Row/>` : "";
         return `<Worksheet ss:Name="${xmlText(name.slice(0, 31))}"><Table>${columnsXml(headers.length)}${titleRows}${rowXml(headers, "Header")}${rows.length ? rows.map((row) => rowXml(row)).join("") : rowXml(["No records available", ...headers.slice(1).map(() => "")])}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>${includeTitle ? 7 : 1}</SplitHorizontal><TopRowBottomPane>${includeTitle ? 7 : 1}</TopRowBottomPane><ActivePane>2</ActivePane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>`;
       };
-      const summaryRows: (string | number)[][] = [["Society", society?.name || "Society Management"], ["Report", report.title], ["Period / Scope", report.subtitle], ["Generated", new Date().toLocaleString("en-IN")], [report.totalLabel, report.total], ["Status", "Unaudited - verify with society accountant / auditor"]];
-      const sheets = [sheetXml("Complete Report", report.headers, report.rows, true), sheetXml("Summary", ["Particular", "Value"], summaryRows)];
+      const summaryRows: (string | number)[][] = [["Society", society?.name || "Society Management"], ["Address", [society?.address, society?.city, society?.state, society?.pin_code].filter(Boolean).join(", ") || "-"], ["Report", report.title], ["Period", reportPeriod(filters.period, financialYearLabel, financialYearFrom, financialYearTo)], ["Generated", new Date().toLocaleString("en-IN")], [report.totalLabel, report.total], ["Status", "Unaudited - verify with society accountant / auditor"], ["Treasurer / Authorized Signatory", ""], ["Secretary / Chairman", ""]];
+      const reportSummaryRows = report.rows.filter(isSummaryRow);
+      const reportDetailRows = report.rows.filter((row) => !isSummaryRow(row));
+      const sheets = [
+        sheetXml("Report Summary", ["Particular", "Value"], summaryRows, true),
+        sheetXml("Category Summary", report.headers, reportSummaryRows),
+        ...(filters.detail === "detailed" ? [sheetXml("Detailed Records", report.headers, reportDetailRows)] : []),
+      ];
 
       if (key === "yearly") {
         const fyIncome = regularIncome;
@@ -202,7 +253,7 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
         sheets.push(sheetXml("Event Javak", ["Date", "Category", "Paid To", "Mode", "Reference", "Amount"], javak.map((r) => [dateText(r.expense_date), r.category, r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)])));
       }
 
-      const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Cell"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/></Borders></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1D4ED8" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style><Style ss:ID="SocietyTitle"><Font ss:Bold="1" ss:Size="16" ss:Color="#1D4ED8"/></Style><Style ss:ID="ReportTitle"><Font ss:Bold="1" ss:Size="13"/></Style><Style ss:ID="Subtitle"><Font ss:Color="#64748B"/><Alignment ss:WrapText="1"/></Style><Style ss:ID="Total"><Font ss:Bold="1"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/></Style></Styles>${sheets.join("")}</Workbook>`;
+      const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Cell"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/></Borders></Style><Style ss:ID="Header"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1D4ED8" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style><Style ss:ID="SocietyTitle"><Font ss:Bold="1" ss:Size="16" ss:Color="#1D4ED8"/></Style><Style ss:ID="ReportTitle"><Font ss:Bold="1" ss:Size="13"/></Style><Style ss:ID="Subtitle"><Font ss:Color="#64748B"/><Alignment ss:WrapText="1"/></Style><Style ss:ID="Total"><Font ss:Bold="1" ss:Size="12"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/></Style></Styles>${sheets.join("")}</Workbook>`;
       const url = URL.createObjectURL(new Blob([xml], { type: "application/vnd.ms-excel" }));
       const link = document.createElement("a"); link.href = url; link.download = `${safeName(society?.name || "society")}-${safeName(report.title)}-${new Date().toISOString().slice(0, 10)}.xls`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
       toast.success("Excel downloaded");
