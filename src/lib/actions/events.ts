@@ -45,7 +45,7 @@ export async function addEventPaymentAction(input: unknown): Promise<Result> {
     const { data: row, error } = await supabase.from("event_flat_contributions").select("*").eq("id", parsed.data.contribution_id).eq("society_id", society.id).single();
     if (error || !row) throw error || new Error("Contribution not found");
     if (parsed.data.amount > Number(row.pending_amount)) return { success: false, message: "Payment exceeds pending amount" };
-    const { error: payError } = await supabase.from("event_flat_payments").insert({ contribution_id: row.id, event_id: row.event_id, society_id: society.id, flat_id: row.flat_id, ...parsed.data, reference_number: parsed.data.reference_number || null, created_by: user?.id ?? null });
+    const { error: payError } = await supabase.from("event_flat_payments").insert({ event_id: row.event_id, society_id: society.id, flat_id: row.flat_id, ...parsed.data, reference_number: parsed.data.reference_number || null, created_by: user?.id ?? null });
     if (payError) throw payError;
     const paid = Number(row.paid_amount) + parsed.data.amount;
     const { error: updateError } = await supabase.from("event_flat_contributions").update({ paid_amount: paid, pending_amount: Math.max(Number(row.amount) - paid, 0), payment_date: parsed.data.payment_date, status: status(Number(row.amount), paid, row.due_date) }).eq("id", row.id);
