@@ -100,18 +100,18 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const summary = useMemo(() => {
-    const totalExpected = filtered.reduce((s, b) => s + Number(b.total_amount), 0);
-    const totalCollected = filtered.reduce((s, b) => s + Number(b.paid_amount), 0);
-    const totalPending = filtered.reduce((s, b) => s + Number(b.pending_amount), 0);
-    const totalOverdue = filtered
+    const totalExpected = bills.reduce((s, b) => s + Number(b.total_amount), 0);
+    const totalCollected = bills.reduce((s, b) => s + Number(b.paid_amount), 0);
+    const totalPending = bills.reduce((s, b) => s + Number(b.pending_amount), 0);
+    const totalOverdue = bills
       .filter((b) => b.status === "overdue")
       .reduce((s, b) => s + Number(b.pending_amount), 0);
-    const paidFlats = new Set(filtered.filter((b) => b.status === "paid").map((b) => b.flat_id)).size;
+    const paidFlats = new Set(bills.filter((b) => b.status === "paid").map((b) => b.flat_id)).size;
     const pendingFlats = new Set(
-      filtered.filter((b) => b.status !== "paid").map((b) => b.flat_id),
+      bills.filter((b) => b.status !== "paid").map((b) => b.flat_id),
     ).size;
     return { totalExpected, totalCollected, totalPending, totalOverdue, paidFlats, pendingFlats };
-  }, [filtered]);
+  }, [bills]);
 
   function selectBillForPayment(bill: MaintenanceBill | null) {
     setSelectedBill(bill);
