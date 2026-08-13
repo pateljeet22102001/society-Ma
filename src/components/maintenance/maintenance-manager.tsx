@@ -291,11 +291,11 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" loading={downloading === "pdf"} disabled={!pendingReportRows.length} onClick={downloadPendingPdf}>
                 <FileText className="h-4 w-4" />
-                Pending PDF
+                Maintenance Dues PDF
               </Button>
               <Button variant="outline" loading={downloading === "excel"} disabled={!pendingReportRows.length} onClick={downloadPendingExcel}>
                 <FileSpreadsheet className="h-4 w-4" />
-                Pending Excel
+                Maintenance Dues Excel
               </Button>
               <Button variant="outline" onClick={() => setGenerateOpen(true)}>
                 <Plus className="h-4 w-4" />
