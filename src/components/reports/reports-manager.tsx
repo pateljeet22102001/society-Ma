@@ -13,9 +13,10 @@ type ExpenseRow = { transaction_date: string; amount: number; vendor_name: strin
 type MaintenanceRow = { bill_month: number; bill_year: number; period_months: number; total_amount: number; paid_amount: number; pending_amount: number; status: string; due_date: string | null; payment_date: string | null; flat: { flat_number: string; owner_name: string | null; wing: { name: string } | null } | null };
 type CashPayment = { payment_date: string; amount: number; payment_mode: string; reference_number: string | null; flat: { flat_number: string } | null; event_id?: string };
 type EventInfo = { id: string; name: string; event_year: number };
+type EventFlatContributionRow = { event_id: string; amount: number; paid_amount: number; pending_amount: number; status: string; due_date: string | null; payment_date: string | null; flat: { flat_number: string; owner_name: string | null } | null };
 type EventAavak = { event_id: string; contribution_type: "money" | "item"; category: string; donor_name: string | null; amount: number | null; item_name: string | null; quantity: number | null; unit: string | null; total_value: number; contribution_date: string; payment_mode: string | null; reference_number: string | null };
 type EventExpenseRow = { event_id: string; category: string; vendor_name: string | null; amount: number; expense_date: string; payment_mode: string; reference_number: string | null };
-type ReportKey = "income" | "expense" | "maintenance" | "pending" | "monthly" | "yearly";
+type ReportKey = "income" | "expense" | "maintenance" | "pending" | "monthly" | "yearly" | `event:${string}`;
 type ExportReport = { title: string; subtitle: string; headers: string[]; rows: (string | number)[][]; totalLabel: string; total: number };
 
 const monthName = (month: number) => new Date(2000, month - 1).toLocaleString("en-IN", { month: "short" });
@@ -24,48 +25,68 @@ const amount = (value: number) => Number(value || 0).toFixed(2);
 const safeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const xmlText = (value: string | number) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-export function ReportsManager({ society, income, expenses, maintenance, maintenancePayments, events, eventFlatPayments, eventAavak, eventExpenses }: { society: Society | null; income: IncomeRow[]; expenses: ExpenseRow[]; maintenance: MaintenanceRow[]; maintenancePayments: CashPayment[]; events: EventInfo[]; eventFlatPayments: CashPayment[]; eventAavak: EventAavak[]; eventExpenses: EventExpenseRow[] }) {
+export function ReportsManager({ society, income, expenses, maintenance, maintenancePayments, events, eventFlatContributions, eventFlatPayments, eventAavak, eventExpenses }: { society: Society | null; income: IncomeRow[]; expenses: ExpenseRow[]; maintenance: MaintenanceRow[]; maintenancePayments: CashPayment[]; events: EventInfo[]; eventFlatContributions: EventFlatContributionRow[]; eventFlatPayments: CashPayment[]; eventAavak: EventAavak[]; eventExpenses: EventExpenseRow[] }) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const year = new Date().getFullYear();
   const regularIncome = income.filter((row) => row.category?.slug !== "maintenance");
-  const moneyAavak = eventAavak.filter((row) => row.contribution_type === "money");
-  const itemAavak = eventAavak.filter((row) => row.contribution_type === "item");
-  const incomeTotal = regularIncome.reduce((sum, row) => sum + Number(row.amount), 0) + maintenancePayments.reduce((sum, row) => sum + Number(row.amount), 0) + eventFlatPayments.reduce((sum, row) => sum + Number(row.amount), 0) + moneyAavak.reduce((sum, row) => sum + Number(row.amount), 0);
-  const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount), 0) + eventExpenses.reduce((sum, row) => sum + Number(row.amount), 0);
+  const incomeTotal = regularIncome.reduce((sum, row) => sum + Number(row.amount), 0) + maintenancePayments.reduce((sum, row) => sum + Number(row.amount), 0);
+  const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount), 0);
   const yearBills = maintenance.filter((row) => Number(row.bill_year) === year);
   const collected = maintenancePayments.filter((row) => new Date(`${row.payment_date}T00:00:00`).getFullYear() === year).reduce((sum, row) => sum + Number(row.amount), 0);
   const pending = yearBills.reduce((sum, row) => sum + Number(row.pending_amount), 0);
-  const eventName = (id?: string) => events.find((event) => event.id === id)?.name || "Event";
 
   function makeReport(key: ReportKey): ExportReport {
+    if (key.startsWith("event:")) {
+      const eventId = key.slice(6); const event = events.find((item) => item.id === eventId);
+      const flatRows = eventFlatContributions.filter((item) => item.event_id === eventId);
+      const payments = eventFlatPayments.filter((item) => item.event_id === eventId);
+      const cash = eventAavak.filter((item) => item.event_id === eventId && item.contribution_type === "money");
+      const items = eventAavak.filter((item) => item.event_id === eventId && item.contribution_type === "item");
+      const javak = eventExpenses.filter((item) => item.event_id === eventId);
+      const flatCollected = payments.reduce((sum, item) => sum + Number(item.amount), 0);
+      const cashDonations = cash.reduce((sum, item) => sum + Number(item.amount), 0);
+      const expensesTotal = javak.reduce((sum, item) => sum + Number(item.amount), 0);
+      const pendingTotal = flatRows.reduce((sum, item) => sum + Number(item.pending_amount), 0);
+      const itemValue = items.reduce((sum, item) => sum + Number(item.total_value), 0);
+      const rows: (string | number)[][] = [
+        ["SUMMARY", "Flat contributions collected", "-", "-", "-", amount(flatCollected)],
+        ["SUMMARY", "Other cash Aavak", "-", "-", "-", amount(cashDonations)],
+        ["SUMMARY", "Event Javak", "-", "-", "-", amount(expensesTotal)],
+        ["SUMMARY", "Pending from flats", "-", "-", "-", amount(pendingTotal)],
+        ["SUMMARY", "Donated item value (non-cash)", "-", "-", "-", amount(itemValue)],
+        ...flatRows.map((r) => ["FLAT", `${r.flat?.flat_number || "-"} - ${r.flat?.owner_name || "-"}`, r.status.replaceAll("_", " "), dateText(r.payment_date || r.due_date), `Paid ${amount(r.paid_amount)} / Pending ${amount(r.pending_amount)}`, amount(r.amount)]),
+        ...cash.map((r) => ["CASH AAVAK", r.category, r.donor_name || "Anonymous", dateText(r.contribution_date), r.payment_mode?.replaceAll("_", " ") || "-", amount(Number(r.amount))]),
+        ...items.map((r) => ["ITEM DONATION", r.item_name || r.category, r.donor_name || "Anonymous", dateText(r.contribution_date), `${r.quantity || 0} ${r.unit || ""}`, amount(r.total_value)]),
+        ...javak.map((r) => ["JAVAK", r.category, r.vendor_name || "-", dateText(r.expense_date), r.payment_mode.replaceAll("_", " "), amount(r.amount)]),
+      ];
+      return { title: `${event?.name || "Event"} ${event?.event_year || ""} Hisab`, subtitle: `Separate event report | Pending INR ${amount(pendingTotal)} | Item value INR ${amount(itemValue)}`, headers: ["Type", "Details", "Person / Status", "Date", "Information", "Value (INR)"], rows, totalLabel: "Event Cash Balance", total: flatCollected + cashDonations - expensesTotal };
+    }
     if (key === "income") {
       const rows = [
         ...regularIncome.map((r) => [dateText(r.transaction_date), "Regular Aavak", r.category?.name || "-", r.person_name || "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.receipt_number || r.reference_number || "-", amount(r.amount)]),
         ...maintenancePayments.map((r) => [dateText(r.payment_date), "Maintenance", "Maintenance payment", "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
-        ...eventFlatPayments.map((r) => [dateText(r.payment_date), "Event flat contribution", eventName(r.event_id), "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
-        ...moneyAavak.map((r) => [dateText(r.contribution_date), "Event cash Aavak", `${eventName(r.event_id)} - ${r.category}`, r.donor_name || "-", "-", r.payment_mode?.replaceAll("_", " ") || "-", r.reference_number || "-", amount(Number(r.amount))]),
       ].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
-      return { title: "Complete Aavak Report", subtitle: "Regular income, maintenance, and event cash received (without duplication)", headers: ["Date", "Source", "Category / Event", "Person", "Flat", "Mode", "Receipt / Ref", "Amount (INR)"], rows, totalLabel: "Total Cash Aavak", total: incomeTotal };
+      return { title: "Society Aavak Report", subtitle: "Regular income and maintenance received; events are reported separately", headers: ["Date", "Source", "Category", "Person", "Flat", "Mode", "Receipt / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Aavak", total: incomeTotal };
     }
     if (key === "expense") {
-      const rows = [...expenses.map((r) => [dateText(r.transaction_date), "Regular Javak", r.category?.name || "-", r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", amount(r.amount)]), ...eventExpenses.map((r) => [dateText(r.expense_date), "Event Javak", `${eventName(r.event_id)} - ${r.category}`, r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)])];
-      return { title: "Complete Javak Report", subtitle: "Regular society and event expenses", headers: ["Date", "Source", "Category / Event", "Vendor", "Mode", "Bill / Ref", "Amount (INR)"], rows, totalLabel: "Total Cash Javak", total: expenseTotal };
+      const rows = expenses.map((r) => [dateText(r.transaction_date), "Society Javak", r.category?.name || "-", r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", amount(r.amount)]);
+      return { title: "Society Javak Report", subtitle: "Regular society expenses; events are reported separately", headers: ["Date", "Source", "Category", "Vendor", "Mode", "Bill / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Javak", total: expenseTotal };
     }
     if (key === "maintenance" || key === "pending") {
       const source = key === "pending" ? yearBills.filter((r) => Number(r.pending_amount) > 0) : yearBills.filter((r) => Number(r.paid_amount) > 0);
       return { title: key === "pending" ? "Pending Maintenance Report" : "Maintenance Collection Report", subtitle: `${year} flat-wise maintenance`, headers: ["Flat", "Owner", "Wing", "Period", "Due", "Paid Date", "Status", "Total", "Paid", "Pending"], rows: source.map((r) => [r.flat?.flat_number || "-", r.flat?.owner_name || "-", r.flat?.wing?.name || "-", `${monthName(r.bill_month)} ${r.bill_year}${r.period_months > 1 ? ` (${r.period_months} months)` : ""}`, dateText(r.due_date), dateText(r.payment_date), r.status.replaceAll("_", " "), amount(r.total_amount), amount(r.paid_amount), amount(r.pending_amount)]), totalLabel: key === "pending" ? "Total Pending" : "Total Collected", total: key === "pending" ? pending : collected };
     }
-    const periods = new Map<string, { label: string; regularIncome: number; maintenance: number; eventIncome: number; regularExpense: number; eventExpense: number; itemValue: number }>();
+    const periods = new Map<string, { label: string; regularIncome: number; maintenance: number; regularExpense: number }>();
     const monthly = key === "monthly";
-    const add = (date: string, field: "regularIncome" | "maintenance" | "eventIncome" | "regularExpense" | "eventExpense" | "itemValue", value: number) => {
+    const add = (date: string, field: "regularIncome" | "maintenance" | "regularExpense", value: number) => {
       const d = new Date(`${date}T00:00:00`); if (monthly && d.getFullYear() !== year) return;
       const periodKey = monthly ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : String(d.getFullYear());
       const label = monthly ? d.toLocaleString("en-IN", { month: "long", year: "numeric" }) : String(d.getFullYear());
-      const current = periods.get(periodKey) || { label, regularIncome: 0, maintenance: 0, eventIncome: 0, regularExpense: 0, eventExpense: 0, itemValue: 0 }; current[field] += Number(value); periods.set(periodKey, current);
+      const current = periods.get(periodKey) || { label, regularIncome: 0, maintenance: 0, regularExpense: 0 }; current[field] += Number(value); periods.set(periodKey, current);
     };
-    regularIncome.forEach((r) => add(r.transaction_date, "regularIncome", r.amount)); maintenancePayments.forEach((r) => add(r.payment_date, "maintenance", r.amount)); eventFlatPayments.forEach((r) => add(r.payment_date, "eventIncome", r.amount)); moneyAavak.forEach((r) => add(r.contribution_date, "eventIncome", Number(r.amount))); itemAavak.forEach((r) => add(r.contribution_date, "itemValue", r.total_value)); expenses.forEach((r) => add(r.transaction_date, "regularExpense", r.amount)); eventExpenses.forEach((r) => add(r.expense_date, "eventExpense", r.amount));
-    const rows = [...periods.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([, r]) => { const cashIncome = r.regularIncome + r.maintenance + r.eventIncome; const cashExpense = r.regularExpense + r.eventExpense; return [r.label, amount(r.regularIncome), amount(r.maintenance), amount(r.eventIncome), amount(cashIncome), amount(r.regularExpense), amount(r.eventExpense), amount(cashExpense), amount(cashIncome - cashExpense), amount(r.itemValue)]; });
-    return { title: monthly ? "Complete Monthly Society Hisab" : "Complete Yearly Society Hisab", subtitle: monthly ? `${year} complete cash flow and donated-item value` : "Year-wise regular, maintenance, event, and donated-item accounting", headers: [monthly ? "Month" : "Year", "Regular Aavak", "Maintenance", "Event Aavak", "Total Aavak", "Regular Javak", "Event Javak", "Total Javak", "Cash Balance", "Item Value"], rows, totalLabel: "Available Cash Balance", total: incomeTotal - expenseTotal };
+    regularIncome.forEach((r) => add(r.transaction_date, "regularIncome", r.amount)); maintenancePayments.forEach((r) => add(r.payment_date, "maintenance", r.amount)); expenses.forEach((r) => add(r.transaction_date, "regularExpense", r.amount));
+    const rows = [...periods.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([, r]) => { const aavak = r.regularIncome + r.maintenance; return [r.label, amount(r.regularIncome), amount(r.maintenance), amount(aavak), amount(r.regularExpense), amount(aavak - r.regularExpense)]; });
+    return { title: monthly ? "Monthly Society Hisab" : "Yearly Society Hisab", subtitle: monthly ? `${year} society accounts; events reported separately` : "Year-wise society accounts; events reported separately", headers: [monthly ? "Month" : "Year", "Regular Aavak", "Maintenance", "Total Aavak", "Society Javak", "Cash Balance"], rows, totalLabel: "Society Cash Balance", total: incomeTotal - expenseTotal };
   }
 
   async function downloadPdf(key: ReportKey) {
@@ -99,5 +120,12 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
     { key: "maintenance", title: "Maintenance Collection", note: `${year} collected`, value: collected }, { key: "pending", title: "Pending Maintenance", note: `${year} pending`, value: pending },
     { key: "monthly", title: "Monthly Summary", note: `${year} month-wise summary`, value: incomeTotal - expenseTotal }, { key: "yearly", title: "Yearly Summary", note: "Year-wise financial summary", value: incomeTotal - expenseTotal },
   ];
-  return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map((report) => <Card key={report.key}><CardHeader title={report.title} description={report.note} /><CardContent><p className="text-2xl font-semibold text-slate-900">{formatCurrency(report.value)}</p><div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" loading={downloading === `${report.key}-pdf`} onClick={() => downloadPdf(report.key)}><FileText className="h-4 w-4" />Download PDF</Button><Button size="sm" variant="outline" loading={downloading === `${report.key}-excel`} onClick={() => downloadExcel(report.key)}><FileSpreadsheet className="h-4 w-4" />Download Excel</Button></div><p className="mt-3 flex items-center gap-1 text-xs text-slate-400"><Download className="h-3.5 w-3.5" />Includes summary and detailed records</p></CardContent></Card>)}</div>;
+  const eventCards = events.map((event) => {
+    const flatCash = eventFlatPayments.filter((row) => row.event_id === event.id).reduce((sum, row) => sum + Number(row.amount), 0);
+    const otherCash = eventAavak.filter((row) => row.event_id === event.id && row.contribution_type === "money").reduce((sum, row) => sum + Number(row.amount), 0);
+    const javak = eventExpenses.filter((row) => row.event_id === event.id).reduce((sum, row) => sum + Number(row.amount), 0);
+    return { key: `event:${event.id}` as ReportKey, title: `${event.name} ${event.event_year}`, note: "Separate complete event Hisab", value: flatCash + otherCash - javak };
+  });
+  const reportCard = (report: { key: ReportKey; title: string; note: string; value: number }) => <Card key={report.key}><CardHeader title={report.title} description={report.note} /><CardContent><p className="text-2xl font-semibold text-slate-900">{formatCurrency(report.value)}</p><div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" loading={downloading === `${report.key}-pdf`} onClick={() => downloadPdf(report.key)}><FileText className="h-4 w-4" />Download PDF</Button><Button size="sm" variant="outline" loading={downloading === `${report.key}-excel`} onClick={() => downloadExcel(report.key)}><FileSpreadsheet className="h-4 w-4" />Download Excel</Button></div><p className="mt-3 flex items-center gap-1 text-xs text-slate-400"><Download className="h-3.5 w-3.5" />Includes summary and detailed records</p></CardContent></Card>;
+  return <div className="space-y-8"><section><h2 className="mb-3 text-lg font-semibold text-slate-900">Society & Maintenance Reports</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(reportCard)}</div></section><section><h2 className="mb-1 text-lg font-semibold text-slate-900">Event Reports</h2><p className="mb-3 text-sm text-slate-500">Each event remains separate from regular society accounts.</p>{eventCards.length ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{eventCards.map(reportCard)}</div> : <Card><CardContent className="text-sm text-slate-500">No events created yet.</CardContent></Card>}</section></div>;
 }
