@@ -44,6 +44,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
   const [deleting, setDeleting] = useState<ExpenseTransaction | null>(null);
   const [loading, setLoading] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [warning, setWarning] = useState<{ values: ExpenseInput; message: string } | null>(null);
 
   const form = useForm<ExpenseInput>({
     resolver: zodResolver(expenseSchema),
@@ -119,19 +120,28 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
     setOpen(true);
   }
 
-  async function onSubmit(values: ExpenseInput) {
+  async function saveExpense(values: ExpenseInput, confirmed = false) {
     setLoading(true);
     const result = editing
-      ? await updateExpenseAction(editing.id, values)
-      : await createExpenseAction(values);
+      ? await updateExpenseAction(editing.id, values, confirmed)
+      : await createExpenseAction(values, confirmed);
     setLoading(false);
     if (!result.success) {
+      if (result.requiresConfirmation) {
+        setWarning({ values, message: result.message || "Please confirm this entry." });
+        return;
+      }
       toast.error(result.message);
       return;
     }
     toast.success(result.message);
+    setWarning(null);
     setOpen(false);
     router.refresh();
+  }
+
+  async function onSubmit(values: ExpenseInput) {
+    await saveExpense(values);
   }
 
   async function confirmDelete() {
@@ -205,10 +215,10 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Edit Expense" : "Add Expense"} size="lg">
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Date" type="date" {...form.register("transaction_date")} />
-            <Select label="Expense Category" options={categories.map((c) => ({ value: c.id, label: c.name }))} {...form.register("category_id")} />
+            <Input label="Date" type="date" error={form.formState.errors.transaction_date?.message} {...form.register("transaction_date")} />
+            <Select label="Expense Category" options={categories.map((c) => ({ value: c.id, label: c.name }))} error={form.formState.errors.category_id?.message} {...form.register("category_id")} />
             <Input label="Vendor / Paid To" {...form.register("vendor_name")} />
-            <Input label="Amount" type="number" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
+            <Input label="Amount" type="number" min="0.01" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
             <Select label="Payment Mode" options={[...PAYMENT_MODES]} {...form.register("payment_mode")} />
             <Input label="Reference Number" {...form.register("reference_number")} />
             <Input label="Bill Number" {...form.register("bill_number")} />
@@ -228,6 +238,16 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
           <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCategoryOpen(false)}>Cancel</Button><Button type="submit" loading={loading}>Add Category</Button></div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!warning}
+        onClose={() => setWarning(null)}
+        title="Check expense entry"
+        description={warning?.message || "Please confirm this entry."}
+        confirmLabel="Continue and save"
+        loading={loading}
+        onConfirm={() => warning && saveExpense(warning.values, true)}
+      />
 
       <ConfirmDialog
         open={!!deleting}

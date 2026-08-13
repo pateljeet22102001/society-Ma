@@ -8,6 +8,8 @@ export const eventSchema = z.object({
   start_date: z.string().optional(), end_date: z.string().optional(),
   contribution_amount: z.coerce.number().min(0), due_date: z.string().optional(),
   description: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.start_date && data.end_date && data.end_date < data.start_date) ctx.addIssue({ code: "custom", path: ["end_date"], message: "End date cannot be before start date" });
 });
 export const eventPaymentSchema = z.object({
   contribution_id: z.string().uuid(), amount: z.coerce.number().positive(),

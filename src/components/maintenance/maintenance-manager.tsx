@@ -62,6 +62,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [pickFlatMode, setPickFlatMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [undoingBill, setUndoingBill] = useState<MaintenanceBill | null>(null);
+  const [paymentWarning, setPaymentWarning] = useState<string | null>(null);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
 
@@ -143,7 +144,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     router.refresh();
   }
 
-  async function onPay() {
+  async function onPay(confirmed = false) {
     if (!selectedBill) {
       toast.error("Please select a flat");
       return;
@@ -164,7 +165,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
       amount,
       payment_date: new Date().toISOString().slice(0, 10),
       payment_mode: paymentMode,
-    });
+    }, confirmed);
     setLoading(false);
     if (!result.success) {
       toast.error(result.message);
@@ -182,10 +183,15 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     const result = await undoLastMaintenancePaymentAction(undoingBill.id);
     setLoading(false);
     if (!result.success) {
+      if (result.requiresConfirmation) {
+        setPaymentWarning(result.message || "Please confirm this payment.");
+        return;
+      }
       toast.error(result.message);
       return;
     }
     toast.success(result.message);
+    setPaymentWarning(null);
     setUndoingBill(null);
     router.refresh();
   }
@@ -394,13 +400,23 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
             <Button type="button" variant="outline" onClick={() => setPayOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" loading={loading} onClick={onPay} disabled={!selectedBill}>
+            <Button type="button" loading={loading} onClick={() => onPay()} disabled={!selectedBill}>
               <Wallet className="h-4 w-4" />
               Save Payment
             </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(paymentWarning)}
+        title="Check payment date"
+        description={paymentWarning || "Please confirm this payment."}
+        confirmLabel="Continue and save"
+        loading={loading}
+        onConfirm={() => onPay(true)}
+        onClose={() => setPaymentWarning(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(undoingBill)}

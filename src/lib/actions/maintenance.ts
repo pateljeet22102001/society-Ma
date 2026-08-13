@@ -9,8 +9,9 @@ import {
 } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
 import type { MaintenanceStatus } from "@/types/database";
+import { financialYearWarning } from "@/lib/financial-year";
 
-export type ActionResult = { success: boolean; message?: string };
+export type ActionResult = { success: boolean; message?: string; requiresConfirmation?: boolean };
 
 function resolveStatus(total: number, paid: number, dueDate?: string | null): MaintenanceStatus {
   if (paid <= 0) {
@@ -113,7 +114,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
   }
 }
 
-export async function addMaintenancePaymentAction(input: unknown): Promise<ActionResult> {
+export async function addMaintenancePaymentAction(input: unknown, confirmed = false): Promise<ActionResult> {
   const parsed = maintenancePaymentSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message };
@@ -123,6 +124,8 @@ export async function addMaintenancePaymentAction(input: unknown): Promise<Actio
     const supabase = await createClient();
     const society = await requireSociety();
     const user = await getCurrentUser();
+    const dateWarning = financialYearWarning(parsed.data.payment_date);
+    if (dateWarning && !confirmed) return { success: false, requiresConfirmation: true, message: dateWarning };
 
     const { data: bill, error: billError } = await supabase
       .from("maintenance_bills")
@@ -136,6 +139,7 @@ export async function addMaintenancePaymentAction(input: unknown): Promise<Actio
     if (paymentAmount > Number(bill.pending_amount)) {
       return { success: false, message: "Payment exceeds pending amount" };
     }
+    if (Number(bill.pending_amount) <= 0) return { success: false, message: "This bill has no pending balance" };
 
     const { error: paymentError } = await supabase.from("maintenance_payments").insert({
       society_id: society.id,

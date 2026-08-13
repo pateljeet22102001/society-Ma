@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, requireSociety } from "@/lib/society";
 import { incomeCategorySchema, incomeSchema } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
+import { financialYearWarning } from "@/lib/financial-year";
 
-export type ActionResult = { success: boolean; message?: string };
+export type ActionResult = { success: boolean; message?: string; requiresConfirmation?: boolean };
 
 function categorySlug(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -31,7 +32,7 @@ export async function createIncomeCategoryAction(input: unknown): Promise<Action
   }
 }
 
-export async function createIncomeAction(input: unknown): Promise<ActionResult> {
+export async function createIncomeAction(input: unknown, confirmed = false): Promise<ActionResult> {
   const parsed = incomeSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message };
@@ -41,6 +42,16 @@ export async function createIncomeAction(input: unknown): Promise<ActionResult> 
     const supabase = await createClient();
     const society = await requireSociety();
     const user = await getCurrentUser();
+
+    const warnings: string[] = [];
+    const dateWarning = financialYearWarning(parsed.data.transaction_date);
+    if (dateWarning) warnings.push(dateWarning);
+    const receipt = parsed.data.receipt_number?.trim();
+    if (receipt) {
+      const { data: duplicate } = await supabase.from("income_transactions").select("id").eq("society_id", society.id).ilike("receipt_number", receipt).limit(1).maybeSingle();
+      if (duplicate) warnings.push(`Receipt number "${receipt}" already exists.`);
+    }
+    if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
 
     const { error } = await supabase.from("income_transactions").insert({
       society_id: society.id,
@@ -65,7 +76,7 @@ export async function createIncomeAction(input: unknown): Promise<ActionResult> 
   }
 }
 
-export async function updateIncomeAction(id: string, input: unknown): Promise<ActionResult> {
+export async function updateIncomeAction(id: string, input: unknown, confirmed = false): Promise<ActionResult> {
   const parsed = incomeSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message };
@@ -73,6 +84,16 @@ export async function updateIncomeAction(id: string, input: unknown): Promise<Ac
 
   try {
     const supabase = await createClient();
+    const society = await requireSociety();
+    const warnings: string[] = [];
+    const dateWarning = financialYearWarning(parsed.data.transaction_date);
+    if (dateWarning) warnings.push(dateWarning);
+    const receipt = parsed.data.receipt_number?.trim();
+    if (receipt) {
+      const { data: duplicate } = await supabase.from("income_transactions").select("id").eq("society_id", society.id).ilike("receipt_number", receipt).neq("id", id).limit(1).maybeSingle();
+      if (duplicate) warnings.push(`Receipt number "${receipt}" already exists.`);
+    }
+    if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
     const { error } = await supabase
       .from("income_transactions")
       .update({
@@ -86,7 +107,8 @@ export async function updateIncomeAction(id: string, input: unknown): Promise<Ac
         description: parsed.data.description || null,
         receipt_number: parsed.data.receipt_number || null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("society_id", society.id);
 
     if (error) throw error;
     revalidatePath("/income");
@@ -100,7 +122,8 @@ export async function updateIncomeAction(id: string, input: unknown): Promise<Ac
 export async function deleteIncomeAction(id: string): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("income_transactions").delete().eq("id", id);
+    const society = await requireSociety();
+    const { error } = await supabase.from("income_transactions").delete().eq("id", id).eq("society_id", society.id);
     if (error) throw error;
     revalidatePath("/income");
     revalidatePath("/dashboard");

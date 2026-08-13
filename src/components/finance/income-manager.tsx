@@ -40,6 +40,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
   const [deleting, setDeleting] = useState<IncomeTransaction | null>(null);
   const [loading, setLoading] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [warning, setWarning] = useState<{ values: IncomeInput; message: string } | null>(null);
 
   const form = useForm<IncomeInput>({
     resolver: zodResolver(incomeSchema),
@@ -115,19 +116,28 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
     setOpen(true);
   }
 
-  async function onSubmit(values: IncomeInput) {
+  async function saveIncome(values: IncomeInput, confirmed = false) {
     setLoading(true);
     const result = editing
-      ? await updateIncomeAction(editing.id, values)
-      : await createIncomeAction(values);
+      ? await updateIncomeAction(editing.id, values, confirmed)
+      : await createIncomeAction(values, confirmed);
     setLoading(false);
     if (!result.success) {
+      if (result.requiresConfirmation) {
+        setWarning({ values, message: result.message || "Please confirm this entry." });
+        return;
+      }
       toast.error(result.message);
       return;
     }
     toast.success(result.message);
+    setWarning(null);
     setOpen(false);
     router.refresh();
+  }
+
+  async function onSubmit(values: IncomeInput) {
+    await saveIncome(values);
   }
 
   async function confirmDelete() {
@@ -205,7 +215,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
             <Select label="Income Category" options={categories.map((c) => ({ value: c.id, label: c.name }))} error={form.formState.errors.category_id?.message} {...form.register("category_id")} />
             <Select label="Flat Number (optional)" options={[{ value: "", label: "Not applicable" }, ...flats.map((f) => ({ value: f.id, label: f.flat_number }))]} {...form.register("flat_id")} />
             <Input label="Person Name" {...form.register("person_name")} />
-            <Input label="Amount" type="number" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
+            <Input label="Amount" type="number" min="0.01" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
             <Select label="Payment Mode" options={[...PAYMENT_MODES]} {...form.register("payment_mode")} />
             <Input label="Reference Number" {...form.register("reference_number")} />
             <Input label="Receipt Number" {...form.register("receipt_number")} />
@@ -224,6 +234,16 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
           <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCategoryOpen(false)}>Cancel</Button><Button type="submit" loading={loading}>Add Category</Button></div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!warning}
+        onClose={() => setWarning(null)}
+        title="Check income entry"
+        description={warning?.message || "Please confirm this entry."}
+        confirmLabel="Continue and save"
+        loading={loading}
+        onConfirm={() => warning && saveIncome(warning.values, true)}
+      />
 
       <ConfirmDialog
         open={!!deleting}

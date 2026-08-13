@@ -6,8 +6,9 @@ import { getCurrentUser, requireSociety } from "@/lib/society";
 import { eventAavakSchema, eventExpenseSchema, eventPaymentSchema, eventSchema } from "@/lib/validations/events";
 import { getErrorMessage } from "@/lib/utils";
 import type { MaintenanceStatus } from "@/types/database";
+import { financialYearWarning } from "@/lib/financial-year";
 
-type Result = { success: boolean; message?: string };
+type Result = { success: boolean; message?: string; requiresConfirmation?: boolean };
 const refresh = () => revalidatePath("/events");
 function status(total: number, paid: number, due?: string | null): MaintenanceStatus {
   if (paid >= total) return "paid";
@@ -38,10 +39,15 @@ export async function generateEventContributionsAction(eventId: string): Promise
   } catch (e) { return { success: false, message: getErrorMessage(e, "Failed to generate contributions") }; }
 }
 
-export async function addEventPaymentAction(input: unknown): Promise<Result> {
+export async function addEventPaymentAction(input: unknown, confirmed = false): Promise<Result> {
   const parsed = eventPaymentSchema.safeParse(input); if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message };
   try {
     const supabase = await createClient(); const society = await requireSociety(); const user = await getCurrentUser();
+    const warnings: string[] = [];
+    const dateWarning = financialYearWarning(parsed.data.payment_date); if (dateWarning) warnings.push(dateWarning);
+    const reference = parsed.data.reference_number?.trim();
+    if (reference) { const { data: duplicate } = await supabase.from("event_flat_payments").select("id").eq("society_id", society.id).ilike("reference_number", reference).limit(1).maybeSingle(); if (duplicate) warnings.push(`Reference number "${reference}" already exists.`); }
+    if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
     const { data: row, error } = await supabase.from("event_flat_contributions").select("*").eq("id", parsed.data.contribution_id).eq("society_id", society.id).single();
     if (error || !row) throw error || new Error("Contribution not found");
     if (parsed.data.amount > Number(row.pending_amount)) return { success: false, message: "Payment exceeds pending amount" };
@@ -68,20 +74,30 @@ export async function undoEventPaymentAction(contributionId: string): Promise<Re
   } catch (e) { return { success: false, message: getErrorMessage(e, "Failed to undo payment") }; }
 }
 
-export async function addEventAavakAction(input: unknown): Promise<Result> {
+export async function addEventAavakAction(input: unknown, confirmed = false): Promise<Result> {
   const parsed = eventAavakSchema.safeParse(input); if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message };
   try {
     const supabase = await createClient(); const society = await requireSociety(); const user = await getCurrentUser(); const d = parsed.data;
+    const warnings: string[] = [];
+    const dateWarning = financialYearWarning(d.contribution_date); if (dateWarning) warnings.push(dateWarning);
+    const reference = d.reference_number?.trim();
+    if (reference) { const { data: duplicate } = await supabase.from("event_contributions").select("id").eq("society_id", society.id).ilike("reference_number", reference).limit(1).maybeSingle(); if (duplicate) warnings.push(`Receipt/reference number "${reference}" already exists.`); }
+    if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
     const total = d.contribution_type === "money" ? Number(d.amount) : Number(d.quantity) * Number(d.unit_price || 0);
     const { error } = await supabase.from("event_contributions").insert({ ...d, society_id: society.id, amount: d.contribution_type === "money" ? d.amount : null, payment_mode: d.contribution_type === "money" ? d.payment_mode : null, item_name: d.contribution_type === "item" ? d.item_name : null, quantity: d.contribution_type === "item" ? d.quantity : null, unit: d.contribution_type === "item" ? d.unit : null, unit_price: d.contribution_type === "item" ? d.unit_price : null, total_value: total, created_by: user?.id ?? null });
     if (error) throw error; refresh(); return { success: true, message: "Event Aavak added" };
   } catch (e) { return { success: false, message: getErrorMessage(e, "Failed to add Aavak") }; }
 }
 
-export async function addEventExpenseAction(input: unknown): Promise<Result> {
+export async function addEventExpenseAction(input: unknown, confirmed = false): Promise<Result> {
   const parsed = eventExpenseSchema.safeParse(input); if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message };
   try {
     const supabase = await createClient(); const society = await requireSociety(); const user = await getCurrentUser();
+    const warnings: string[] = [];
+    const dateWarning = financialYearWarning(parsed.data.expense_date); if (dateWarning) warnings.push(dateWarning);
+    const reference = parsed.data.reference_number?.trim();
+    if (reference) { const { data: duplicate } = await supabase.from("event_expenses").select("id").eq("society_id", society.id).ilike("reference_number", reference).limit(1).maybeSingle(); if (duplicate) warnings.push(`Bill/reference number "${reference}" already exists.`); }
+    if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
     const { error } = await supabase.from("event_expenses").insert({ ...parsed.data, society_id: society.id, created_by: user?.id ?? null });
     if (error) throw error; refresh(); return { success: true, message: "Event expense added" };
   } catch (e) { return { success: false, message: getErrorMessage(e, "Failed to add expense") }; }
