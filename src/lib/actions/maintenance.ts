@@ -198,3 +198,112 @@ export async function addMaintenancePaymentAction(input: unknown): Promise<Actio
     return { success: false, message: getErrorMessage(error, "Failed to record payment") };
   }
 }
+
+export async function undoLastMaintenancePaymentAction(billId: string): Promise<ActionResult> {
+  if (!billId) return { success: false, message: "Bill is required" };
+
+  try {
+    const supabase = await createClient();
+    const society = await requireSociety();
+
+    const { data: bill, error: billError } = await supabase
+      .from("maintenance_bills")
+      .select("*")
+      .eq("id", billId)
+      .eq("society_id", society.id)
+      .single();
+
+    if (billError || !bill) throw billError || new Error("Bill not found");
+
+    const { data: payment, error: paymentError } = await supabase
+      .from("maintenance_payments")
+      .select("*")
+      .eq("bill_id", bill.id)
+      .eq("society_id", society.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (paymentError) throw paymentError;
+    if (!payment) return { success: false, message: "No payment found to undo" };
+
+    const { error: deletePaymentError } = await supabase
+      .from("maintenance_payments")
+      .delete()
+      .eq("id", payment.id)
+      .eq("society_id", society.id);
+
+    if (deletePaymentError) throw deletePaymentError;
+
+    const { data: remainingPayments, error: remainingError } = await supabase
+      .from("maintenance_payments")
+      .select("amount, payment_date, created_at")
+      .eq("bill_id", bill.id)
+      .eq("society_id", society.id)
+      .order("created_at", { ascending: false });
+
+    if (remainingError) throw remainingError;
+
+    const paidAmount = (remainingPayments || []).reduce(
+      (sum, item) => sum + Number(item.amount),
+      0,
+    );
+    const pendingAmount = Math.max(Number(bill.total_amount) - paidAmount, 0);
+    const status = resolveStatus(Number(bill.total_amount), paidAmount, bill.due_date);
+    const latestPaymentDate = remainingPayments?.[0]?.payment_date ?? null;
+
+    const { error: updateError } = await supabase
+      .from("maintenance_bills")
+      .update({
+        paid_amount: paidAmount,
+        pending_amount: pendingAmount,
+        payment_date: latestPaymentDate,
+        status,
+      })
+      .eq("id", bill.id)
+      .eq("society_id", society.id);
+
+    if (updateError) throw updateError;
+
+    // Remove the income entry created alongside this maintenance payment.
+    const { data: maintenanceCategory } = await supabase
+      .from("income_categories")
+      .select("id")
+      .eq("slug", "maintenance")
+      .is("society_id", null)
+      .maybeSingle();
+
+    if (maintenanceCategory) {
+      const { data: matchingIncome } = await supabase
+        .from("income_transactions")
+        .select("id")
+        .eq("society_id", society.id)
+        .eq("category_id", maintenanceCategory.id)
+        .eq("flat_id", bill.flat_id)
+        .eq("transaction_date", payment.payment_date)
+        .eq("amount", payment.amount)
+        .eq("description", `Maintenance ${bill.bill_month}/${bill.bill_year}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (matchingIncome) {
+        const { error: deleteIncomeError } = await supabase
+          .from("income_transactions")
+          .delete()
+          .eq("id", matchingIncome.id)
+          .eq("society_id", society.id);
+
+        if (deleteIncomeError) throw deleteIncomeError;
+      }
+    }
+
+    revalidatePath("/maintenance");
+    revalidatePath("/income");
+    revalidatePath("/dashboard");
+    revalidatePath("/reports");
+    return { success: true, message: "Last payment undone" };
+  } catch (error) {
+    return { success: false, message: getErrorMessage(error, "Failed to undo payment") };
+  }
+}

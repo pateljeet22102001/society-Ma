@@ -14,6 +14,7 @@ import {
 import {
   addMaintenancePaymentAction,
   generateMaintenanceBillsAction,
+  undoLastMaintenancePaymentAction,
 } from "@/lib/actions/maintenance";
 import {
   BILLING_FREQUENCIES,
@@ -34,6 +35,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Pagination } from "@/components/ui/pagination";
 import { StatCard } from "@/components/ui/stat-card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AlertCircle, CheckCircle2, Clock3, IndianRupee } from "lucide-react";
 
 interface MaintenanceManagerProps {
@@ -59,6 +61,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
   const [pickFlatMode, setPickFlatMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [undoingBill, setUndoingBill] = useState<MaintenanceBill | null>(null);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
 
@@ -172,6 +175,21 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     router.refresh();
   }
 
+  async function onUndoPayment() {
+    if (!undoingBill) return;
+
+    setLoading(true);
+    const result = await undoLastMaintenancePaymentAction(undoingBill.id);
+    setLoading(false);
+    if (!result.success) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success(result.message);
+    setUndoingBill(null);
+    router.refresh();
+  }
+
   function getFlatNumber(bill: MaintenanceBill) {
     return bill.flat?.flat_number || flats.find((f) => f.id === bill.flat_id)?.flat_number || "—";
   }
@@ -250,7 +268,20 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
           emptyTitle="No maintenance bills"
           emptyDescription="Click Generate Bills. All active flats will become Pending for that period."
           actions={(row) =>
-            row.status !== "paid" ? (
+            Number(row.paid_amount) > 0 ? (
+              <div className="flex items-center justify-end gap-2">
+                {Number(row.pending_amount) > 0 ? (
+                  <Button size="sm" onClick={() => openPay(row)}>
+                    Pay
+                  </Button>
+                ) : (
+                  <span className="text-xs text-slate-400">{formatDate(row.payment_date)}</span>
+                )}
+                <Button size="sm" variant="outline" onClick={() => setUndoingBill(row)}>
+                  Undo payment
+                </Button>
+              </div>
+            ) : row.status !== "paid" ? (
               <Button size="sm" onClick={() => openPay(row)}>
                 Pay
               </Button>
@@ -370,6 +401,20 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(undoingBill)}
+        title="Undo last payment?"
+        description={
+          undoingBill
+            ? `The most recent payment for flat ${getFlatNumber(undoingBill)} will be removed and the outstanding amount will be recalculated.`
+            : "The most recent maintenance payment will be removed."
+        }
+        confirmLabel="Undo payment"
+        loading={loading}
+        onConfirm={onUndoPayment}
+        onClose={() => setUndoingBill(null)}
+      />
     </div>
   );
 }
