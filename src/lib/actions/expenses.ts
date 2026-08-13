@@ -47,7 +47,7 @@ export async function createExpenseAction(input: unknown, confirmed = false): Pr
     }
     if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
 
-    const { error } = await supabase.from("expense_transactions").insert({
+    const { data: created, error } = await supabase.from("expense_transactions").insert({
       society_id: society.id,
       category_id: parsed.data.category_id,
       transaction_date: parsed.data.transaction_date,
@@ -59,12 +59,12 @@ export async function createExpenseAction(input: unknown, confirmed = false): Pr
       bill_number: parsed.data.bill_number || null,
       notes: parsed.data.notes || null,
       created_by: user?.id ?? null,
-    });
+    }).select("voucher_number").single();
 
     if (error) throw error;
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
-    return { success: true, message: "Expense added" };
+    return { success: true, message: created?.voucher_number ? `Expense added · ${created.voucher_number}` : "Expense added" };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to add expense") };
   }

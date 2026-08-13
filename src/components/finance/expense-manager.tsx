@@ -70,6 +70,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
       const matchesSearch =
         !q ||
         item.vendor_name?.toLowerCase().includes(q) ||
+        item.voucher_number?.toLowerCase().includes(q) ||
         item.bill_number?.toLowerCase().includes(q) ||
         item.description?.toLowerCase().includes(q) ||
         item.category?.name?.toLowerCase().includes(q);
@@ -168,6 +169,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
       render: (row) => <span className="font-semibold text-rose-600">{formatCurrency(row.amount)}</span>,
     },
     { key: "mode", header: "Mode", render: (row) => row.payment_mode.replace("_", " ") },
+    { key: "voucher", header: "Voucher No.", render: (row) => row.voucher_number || "—" },
     { key: "bill", header: "Bill No.", render: (row) => row.bill_number || "—" },
   ];
 
@@ -221,6 +223,7 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
             <Input label="Amount" type="number" min="0.01" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
             <Select label="Payment Mode" options={[...PAYMENT_MODES]} {...form.register("payment_mode")} />
             <Input label="Reference Number" {...form.register("reference_number")} />
+            <Input label="Voucher Number" value={editing?.voucher_number || "Generated after saving"} disabled />
             <Input label="Bill Number" {...form.register("bill_number")} />
           </div>
           <Textarea label="Description" {...form.register("description")} />

@@ -53,7 +53,7 @@ export async function createIncomeAction(input: unknown, confirmed = false): Pro
     }
     if (warnings.length && !confirmed) return { success: false, requiresConfirmation: true, message: `${warnings.join(" ")} Continue anyway?` };
 
-    const { error } = await supabase.from("income_transactions").insert({
+    const { data: created, error } = await supabase.from("income_transactions").insert({
       society_id: society.id,
       category_id: parsed.data.category_id,
       flat_id: parsed.data.flat_id || null,
@@ -63,14 +63,14 @@ export async function createIncomeAction(input: unknown, confirmed = false): Pro
       payment_mode: parsed.data.payment_mode,
       reference_number: parsed.data.reference_number || null,
       description: parsed.data.description || null,
-      receipt_number: parsed.data.receipt_number || null,
+      receipt_number: null,
       created_by: user?.id ?? null,
-    });
+    }).select("receipt_number").single();
 
     if (error) throw error;
     revalidatePath("/income");
     revalidatePath("/dashboard");
-    return { success: true, message: "Income added" };
+    return { success: true, message: created?.receipt_number ? `Income added · ${created.receipt_number}` : "Income added" };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to add income") };
   }

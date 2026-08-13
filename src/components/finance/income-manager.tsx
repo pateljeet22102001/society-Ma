@@ -165,6 +165,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
       render: (row) => <span className="font-semibold text-emerald-600">{formatCurrency(row.amount)}</span>,
     },
     { key: "mode", header: "Mode", render: (row) => row.payment_mode.replace("_", " ") },
+    { key: "receipt", header: "Receipt No.", render: (row) => row.receipt_number || "—" },
   ];
 
   return (
@@ -218,7 +219,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
             <Input label="Amount" type="number" min="0.01" step="0.01" error={form.formState.errors.amount?.message} {...form.register("amount")} />
             <Select label="Payment Mode" options={[...PAYMENT_MODES]} {...form.register("payment_mode")} />
             <Input label="Reference Number" {...form.register("reference_number")} />
-            <Input label="Receipt Number" {...form.register("receipt_number")} />
+            {editing ? <Input label="Receipt Number" {...form.register("receipt_number")} /> : <Input label="Receipt Number" value="Generated after saving" disabled />}
           </div>
           <Textarea label="Description" {...form.register("description")} />
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

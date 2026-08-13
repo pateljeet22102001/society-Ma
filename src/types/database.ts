@@ -115,6 +115,7 @@ export interface ExpenseTransaction {
   reference_number: string | null;
   description: string | null;
   bill_number: string | null;
+  voucher_number: string | null;
   notes: string | null;
   status: EntityStatus;
   created_by: string | null;
