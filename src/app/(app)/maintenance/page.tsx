@@ -50,6 +50,7 @@ export default async function MaintenancePage() {
       />
       <Suspense fallback={<PageSkeleton />}>
         <MaintenanceManager
+          society={society}
           bills={bills || []}
           flats={flats || []}
           wings={wings || []}

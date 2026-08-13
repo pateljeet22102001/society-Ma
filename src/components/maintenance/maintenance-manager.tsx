@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Wallet } from "lucide-react";
+import { FileSpreadsheet, FileText, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import type { Flat, MaintenanceBill, MaintenanceSettings, PaymentMode, Wing } from "@/types/database";
+import type { Flat, MaintenanceBill, MaintenanceSettings, PaymentMode, Society, Wing } from "@/types/database";
 import {
   generateMaintenanceSchema,
   type GenerateMaintenanceInput,
@@ -39,13 +39,14 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AlertCircle, CheckCircle2, Clock3, IndianRupee } from "lucide-react";
 
 interface MaintenanceManagerProps {
+  society: Society | null;
   bills: MaintenanceBill[];
   flats: Flat[];
   wings: Wing[];
   settings: MaintenanceSettings | null;
 }
 
-export function MaintenanceManager({ bills, flats, wings, settings }: MaintenanceManagerProps) {
+export function MaintenanceManager({ society, bills, flats, wings, settings }: MaintenanceManagerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
@@ -63,6 +64,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const [loading, setLoading] = useState(false);
   const [undoingBill, setUndoingBill] = useState<MaintenanceBill | null>(null);
   const [paymentWarning, setPaymentWarning] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<"pdf" | "excel" | null>(null);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
 
@@ -102,6 +104,48 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   }, [bills, flats, search, statusFilter, wingFilter, monthFilter, yearFilter]);
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pendingReportRows = filtered.filter((bill) => Number(bill.pending_amount) > 0);
+
+  function reportFlat(bill: MaintenanceBill) {
+    return bill.flat || flats.find((flat) => flat.id === bill.flat_id) || null;
+  }
+
+  function reportScope() {
+    const wing = wings.find((item) => item.id === wingFilter)?.name;
+    return [yearFilter ? `Year ${yearFilter}` : "All years", monthFilter ? MONTHS.find((item) => item.value === monthFilter)?.label : null, wing ? `Wing ${wing}` : null, search ? `Flat search: ${search}` : null, statusFilter ? `Status: ${statusFilter.replaceAll("_", " ")}` : null].filter(Boolean).join(" | ");
+  }
+
+  async function downloadPendingPdf() {
+    if (!pendingReportRows.length) return toast.error("No pending maintenance records for the selected filters");
+    setDownloading("pdf");
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const width = doc.internal.pageSize.getWidth(); const height = doc.internal.pageSize.getHeight();
+      const totalPending = pendingReportRows.reduce((sum, bill) => sum + Number(bill.pending_amount), 0);
+      const overdue = pendingReportRows.filter((bill) => bill.status === "overdue").reduce((sum, bill) => sum + Number(bill.pending_amount), 0);
+      const uniqueFlats = new Set(pendingReportRows.map((bill) => bill.flat_id)).size;
+      const header = () => { doc.setFillColor(29, 78, 216); doc.rect(0, 0, width, 24, "F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(15); doc.text(society?.name || "Society Management", 12, 10); doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.text([society?.address, society?.city, society?.state].filter(Boolean).join(", ") || "Pending maintenance report", 12, 17); };
+      header(); doc.setTextColor(15,23,42); doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Pending Maintenance Report (Unaudited)", 12, 35); doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(100,116,139); doc.text(`${reportScope()} | Generated ${new Date().toLocaleString("en-IN")}`, 12, 42);
+      const metrics = [["PENDING FLATS", String(uniqueFlats)], ["TOTAL PENDING", `INR ${totalPending.toLocaleString("en-IN", {minimumFractionDigits:2})}`], ["TOTAL OVERDUE", `INR ${overdue.toLocaleString("en-IN", {minimumFractionDigits:2})}`]];
+      metrics.forEach(([label,value], index) => { const x=12+index*88; doc.setFillColor(239,246,255); doc.roundedRect(x,48,82,18,2,2,"F"); doc.setTextColor(30,64,175); doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.text(label,x+4,55); doc.setTextColor(15,23,42); doc.setFontSize(12); doc.text(value,x+4,62); });
+      autoTable(doc, { startY: 74, margin:{left:12,right:12,top:30,bottom:18}, head:[["Wing","Flat","Owner / Resident","Billing Period","Due Date","Total","Paid","Pending","Status"]], body:pendingReportRows.map((bill)=>{const flat=reportFlat(bill);return [flat?.wing?.name || wings.find((wing)=>wing.id===flat?.wing_id)?.name || "—",flat?.flat_number || "—",flat?.owner_name || flat?.resident_name || "—",billingPeriodLabel(bill.bill_month,bill.bill_year,Number(bill.period_months || 1)),formatDate(bill.due_date),Number(bill.total_amount).toLocaleString("en-IN"),Number(bill.paid_amount).toLocaleString("en-IN"),Number(bill.pending_amount).toLocaleString("en-IN"),bill.status.replaceAll("_"," ")]}), theme:"grid", styles:{fontSize:7.5,cellPadding:2,lineColor:[226,232,240]}, headStyles:{fillColor:[29,78,216],textColor:255}, alternateRowStyles:{fillColor:[248,250,252]}, didDrawPage:({pageNumber})=>{header();doc.setFontSize(8);doc.setTextColor(100,116,139);doc.text("UNAUDITED - For society records",12,height-6);doc.text(`Page ${pageNumber}`,width-12,height-6,{align:"right"});} });
+      doc.save(`${(society?.name || "society").toLowerCase().replace(/[^a-z0-9]+/g,"-")}-pending-maintenance-${new Date().toISOString().slice(0,10)}.pdf`); toast.success("Pending maintenance PDF downloaded");
+    } catch { toast.error("Could not generate pending PDF"); } finally { setDownloading(null); }
+  }
+
+  function downloadPendingExcel() {
+    if (!pendingReportRows.length) return toast.error("No pending maintenance records for the selected filters");
+    setDownloading("excel");
+    try {
+      const escape=(value:unknown)=>String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+      const row=(cells:unknown[],style="Cell")=>`<Row>${cells.map((cell)=>`<Cell ss:StyleID="${style}"><Data ss:Type="String">${escape(cell)}</Data></Cell>`).join("")}</Row>`;
+      const total=pendingReportRows.reduce((sum,bill)=>sum+Number(bill.pending_amount),0);
+      const details=pendingReportRows.map((bill)=>{const flat=reportFlat(bill);return row([flat?.wing?.name || wings.find((wing)=>wing.id===flat?.wing_id)?.name || "—",flat?.flat_number || "—",flat?.owner_name || flat?.resident_name || "—",billingPeriodLabel(bill.bill_month,bill.bill_year,Number(bill.period_months || 1)),formatDate(bill.due_date),Number(bill.total_amount).toFixed(2),Number(bill.paid_amount).toFixed(2),Number(bill.pending_amount).toFixed(2),bill.status.replaceAll("_"," ")]);}).join("");
+      const xml=`<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Cell"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/></Borders></Style><Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1D4ED8" ss:Pattern="Solid"/></Style><Style ss:ID="Title"><Font ss:Bold="1" ss:Size="16" ss:Color="#1D4ED8"/></Style></Styles><Worksheet ss:Name="Pending Maintenance"><Table><Column ss:Width="80"/><Column ss:Width="80"/><Column ss:Width="140"/><Column ss:Width="130"/><Column ss:Width="90"/><Column ss:Width="80"/><Column ss:Width="80"/><Column ss:Width="90"/><Column ss:Width="90"/>${row([society?.name || "Society Management"],"Title")}${row(["Pending Maintenance Report (Unaudited)"],"Title")}${row([reportScope()])}${row([`Generated ${new Date().toLocaleString("en-IN")}`])}${row(["Pending flats",new Set(pendingReportRows.map((bill)=>bill.flat_id)).size,"Total pending",total.toFixed(2)])}<Row/>${row(["Wing","Flat","Owner / Resident","Billing Period","Due Date","Total","Paid","Pending","Status"],"Header")}${details}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>7</SplitHorizontal><TopRowBottomPane>7</TopRowBottomPane></WorksheetOptions></Worksheet></Workbook>`;
+      const url=URL.createObjectURL(new Blob([xml],{type:"application/vnd.ms-excel"}));const link=document.createElement("a");link.href=url;link.download=`pending-maintenance-${new Date().toISOString().slice(0,10)}.xls`;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);toast.success("Pending maintenance Excel downloaded");
+    } catch { toast.error("Could not generate pending Excel"); } finally { setDownloading(null); }
+  }
 
   const summary = useMemo(() => {
     const totalExpected = bills.reduce((s, b) => s + Number(b.total_amount), 0);
@@ -245,6 +289,14 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
           description={`Cycle: ${billingFrequencyLabel(frequencyMonths)}. Generate → flats become Pending → click Pay → Amount + Payment Method.`}
           action={
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" loading={downloading === "pdf"} disabled={!pendingReportRows.length} onClick={downloadPendingPdf}>
+                <FileText className="h-4 w-4" />
+                Pending PDF
+              </Button>
+              <Button variant="outline" loading={downloading === "excel"} disabled={!pendingReportRows.length} onClick={downloadPendingExcel}>
+                <FileSpreadsheet className="h-4 w-4" />
+                Pending Excel
+              </Button>
               <Button variant="outline" onClick={() => setGenerateOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Generate Bills
