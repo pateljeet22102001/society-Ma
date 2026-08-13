@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   income: "Income",
   expenses: "Expenses",
   maintenance: "Maintenance",
+  events: "Event Hisab",
   reports: "Reports",
   settings: "Settings",
 };

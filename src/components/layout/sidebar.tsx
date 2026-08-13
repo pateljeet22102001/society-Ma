@@ -12,6 +12,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  CalendarHeart,
   X,
 } from "lucide-react";
 import { APP_NAME, NAV_ITEMS } from "@/lib/constants";
@@ -26,6 +27,7 @@ const icons = {
   TrendingUp,
   TrendingDown,
   Wallet,
+  CalendarHeart,
   FileBarChart,
   Settings,
 };

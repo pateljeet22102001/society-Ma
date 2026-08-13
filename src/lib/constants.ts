@@ -53,6 +53,7 @@ export const NAV_ITEMS = [
   { href: "/income", label: "Income", icon: "TrendingUp" },
   { href: "/expenses", label: "Expenses", icon: "TrendingDown" },
   { href: "/maintenance", label: "Maintenance", icon: "Wallet" },
+  { href: "/events", label: "Event Hisab", icon: "CalendarHeart" },
   { href: "/reports", label: "Reports", icon: "FileBarChart" },
   { href: "/settings", label: "Settings", icon: "Settings" },
 ] as const;

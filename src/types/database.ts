@@ -185,3 +185,30 @@ export interface DashboardStats {
   paidFlats: number;
   pendingFlats: number;
 }
+
+export interface SocietyEvent {
+  id: string; society_id: string; name: string; event_year: number;
+  start_date: string | null; end_date: string | null; contribution_amount: number;
+  due_date: string | null; description: string | null; status: EntityStatus;
+  created_at: string; updated_at: string;
+}
+
+export interface EventFlatContribution {
+  id: string; event_id: string; society_id: string; flat_id: string; amount: number;
+  paid_amount: number; pending_amount: number; status: MaintenanceStatus;
+  due_date: string | null; payment_date: string | null; flat?: Flat | null;
+}
+
+export interface EventContribution {
+  id: string; event_id: string; society_id: string; contribution_type: "money" | "item";
+  category: string; donor_name: string | null; mobile_number: string | null;
+  amount: number | null; payment_mode: PaymentMode | null; item_name: string | null;
+  quantity: number | null; unit: string | null; unit_price: number | null;
+  total_value: number; contribution_date: string; reference_number: string | null; notes: string | null;
+}
+
+export interface EventExpense {
+  id: string; event_id: string; society_id: string; category: string; vendor_name: string | null;
+  amount: number; expense_date: string; payment_mode: PaymentMode;
+  reference_number: string | null; notes: string | null;
+}
