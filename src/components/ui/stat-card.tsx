@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
@@ -6,6 +7,7 @@ interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
   tone?: "blue" | "green" | "amber" | "rose" | "slate";
   hint?: string;
+  href?: string;
 }
 
 const tones = {
@@ -16,9 +18,9 @@ const tones = {
   slate: "bg-slate-100 text-slate-700",
 };
 
-export function StatCard({ title, value, icon: Icon, tone = "blue", hint }: StatCardProps) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-soft sm:p-5">
+export function StatCard({ title, value, icon: Icon, tone = "blue", hint, href }: StatCardProps) {
+  const content = (
+    <div className={cn("rounded-2xl border border-slate-200/80 bg-white p-4 shadow-soft sm:p-5", href && "h-full cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-within:border-primary/40")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-slate-500">{title}</p>
@@ -33,4 +35,5 @@ export function StatCard({ title, value, icon: Icon, tone = "blue", hint }: Stat
       </div>
     </div>
   );
+  return href ? <Link href={href} aria-label={`View ${title}`} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{content}</Link> : content;
 }

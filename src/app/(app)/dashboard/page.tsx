@@ -50,34 +50,39 @@ export default async function DashboardPage() {
           value={formatCurrency(stats.totalIncome)}
           icon={IndianRupee}
           tone="green"
+          href="/income"
         />
         <StatCard
           title="Total Expense"
           value={formatCurrency(stats.totalExpense)}
           icon={Banknote}
           tone="rose"
+          href="/expenses"
         />
         <StatCard
           title="Current Balance"
           value={formatCurrency(stats.currentBalance)}
           icon={CircleDollarSign}
           tone="blue"
+          href="/reports"
         />
-        <StatCard title="Total Flats" value={String(stats.totalFlats)} icon={Home} tone="slate" />
+        <StatCard title="Total Flats" value={String(stats.totalFlats)} icon={Home} tone="slate" href="/society/flats" />
         <StatCard
           title="Maintenance Collected"
           value={formatCurrency(stats.maintenanceCollected)}
           icon={Wallet}
           tone="green"
+          href="/maintenance?filter=collected&year=all"
         />
         <StatCard
           title="Maintenance Pending"
           value={formatCurrency(stats.maintenancePending)}
           icon={AlertCircle}
           tone="amber"
+          href="/maintenance?filter=outstanding&year=all"
         />
-        <StatCard title="Paid Flats" value={String(stats.paidFlats)} icon={CheckCircle2} tone="green" />
-        <StatCard title="Pending Flats" value={String(stats.pendingFlats)} icon={Clock3} tone="amber" />
+        <StatCard title="Paid Flats" value={String(stats.paidFlats)} icon={CheckCircle2} tone="green" href="/maintenance?filter=paid&year=all" />
+        <StatCard title="Pending Flats" value={String(stats.pendingFlats)} icon={Clock3} tone="amber" href="/maintenance?filter=outstanding&year=all" />
       </div>
 
       <div>

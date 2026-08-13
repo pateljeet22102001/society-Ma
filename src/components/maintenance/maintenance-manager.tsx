@@ -49,10 +49,10 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("filter") || "");
   const [wingFilter, setWingFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+  const [yearFilter, setYearFilter] = useState(searchParams.get("year") === "all" ? "" : String(new Date().getFullYear()));
   const [page, setPage] = useState(1);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(searchParams.get("pay") === "1");
@@ -90,7 +90,10 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
     return bills.filter((bill) => {
       const flat = bill.flat || flats.find((f) => f.id === bill.flat_id);
       const matchesSearch = !q || flat?.flat_number.toLowerCase().includes(q);
-      const matchesStatus = !statusFilter || bill.status === statusFilter;
+      const matchesStatus = !statusFilter
+        || (statusFilter === "collected" && Number(bill.paid_amount) > 0)
+        || (statusFilter === "outstanding" && Number(bill.pending_amount) > 0)
+        || bill.status === statusFilter;
       const matchesWing = !wingFilter || flat?.wing_id === wingFilter;
       const matchesMonth = !monthFilter || String(bill.bill_month) === monthFilter;
       const matchesYear = !yearFilter || String(bill.bill_year) === yearFilter;
@@ -256,7 +259,7 @@ export function MaintenanceManager({ bills, flats, wings, settings }: Maintenanc
         <CardContent className="space-y-4 !pt-0">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search flat..." />
-            <Select options={[{ value: "", label: "All Statuses" }, ...MAINTENANCE_STATUSES.map((s) => ({ value: s.value, label: s.label }))]} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} />
+            <Select options={[{ value: "", label: "All Statuses" }, { value: "collected", label: "Any Collection" }, { value: "outstanding", label: "All Outstanding" }, ...MAINTENANCE_STATUSES.map((s) => ({ value: s.value, label: s.label }))]} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} />
             <Select options={[{ value: "", label: "All Wings" }, ...wings.map((w) => ({ value: w.id, label: `Wing ${w.name}` }))]} value={wingFilter} onChange={(e) => { setWingFilter(e.target.value); setPage(1); }} />
             <Select options={[{ value: "", label: "All Months" }, ...MONTHS]} value={monthFilter} onChange={(e) => { setMonthFilter(e.target.value); setPage(1); }} />
             <Input
