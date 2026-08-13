@@ -156,11 +156,34 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
     return { ...report, rows: report.rows.filter((row) => row.some((cell) => String(cell).toUpperCase() === "SUMMARY")) };
   }
 
+  function simpleSummary(key: ReportKey, report: ExportReport) {
+    const rows = report.rows.filter(isSummaryRow);
+    if (key === "yearly") {
+      return { headers: ["Category", "Receipts (INR)", "Payments (INR)", "Net (INR)"], rows: rows.filter((row) => row[1] === "CATEGORY").map((row) => [row[2], row[7], row[8], row[9]]), metrics: [{ label: "Opening Balance", value: filters.openingBalance }, { label: "Total Receipts", value: incomeTotal }, { label: "Total Payments", value: expenseTotal }, { label: "Closing Balance", value: report.total }] };
+    }
+    if (key === "monthly") {
+      return { headers: ["Month", "Receipts (INR)", "Payments (INR)", "Net (INR)"], rows: rows.filter((row) => row[1] === "SUMMARY").map((row) => [row[0], row[5], row[6], row[7]]), metrics: [{ label: "Opening Balance", value: filters.openingBalance }, { label: "Total Receipts", value: incomeTotal }, { label: "Total Payments", value: expenseTotal }, { label: "Closing Balance", value: report.total }] };
+    }
+    if (key === "income") {
+      const regular = regularIncome.reduce((sum, row) => sum + Number(row.amount), 0);
+      return { headers: ["Aavak Category", "Amount (INR)"], rows: rows.map((row) => [row[2], row[7]]), metrics: [{ label: "Regular Aavak", value: regular }, { label: "Maintenance Received", value: collected }, { label: "Total Aavak", value: report.total }] };
+    }
+    if (key === "expense") return { headers: ["Javak Category", "Amount (INR)"], rows: rows.map((row) => [row[2], row[7]]), metrics: [{ label: "Total Javak", value: report.total }] };
+    if (key === "maintenance" || key === "pending") {
+      return { headers: ["Wing", key === "pending" ? "Pending (INR)" : "Collected (INR)"], rows: rows.map((row) => [row[2], key === "pending" ? row[9] : row[8]]), metrics: [{ label: "Total Billed", value: yearBills.reduce((sum, row) => sum + Number(row.total_amount), 0) }, { label: "Collected", value: collected }, { label: "Pending", value: pending }] };
+    }
+    if (key.startsWith("event:")) {
+      return { headers: ["Particular", "Amount / Value (INR)"], rows: rows.map((row) => [row[1], row[5]]), metrics: [{ label: report.totalLabel, value: report.total }] };
+    }
+    return { headers: ["Particular", "Amount (INR)"], rows, metrics: [{ label: report.totalLabel, value: report.total }] };
+  }
+
   async function downloadPdf(key: ReportKey) {
     setDownloading(`${key}-pdf`);
     try {
       const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
       const report = preparedReport(key);
+      const summary = simpleSummary(key, report);
       const orientation = report.headers.length > 7 ? "landscape" : "portrait";
       const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -169,7 +192,6 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
       const address = [society?.address, society?.city, society?.state, society?.pin_code].filter(Boolean).join(", ") || "Society financial report";
       const generated = new Date().toLocaleString("en-IN");
       const period = reportPeriod(filters.period, financialYearLabel, financialYearFrom, financialYearTo);
-      const summaryRows = report.rows.filter(isSummaryRow);
       const detailRows = report.rows.filter((row) => !isSummaryRow(row));
       const drawPageFrame = () => {
         doc.setFillColor(29, 78, 216); doc.rect(0, 0, pageWidth, 24, "F");
@@ -180,10 +202,8 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
       drawPageFrame();
       doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text(report.title, margin, 35);
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); doc.text(`${period}  |  Generated ${generated}`, margin, 42);
-      doc.setFillColor(239, 246, 255); doc.roundedRect(margin, 48, pageWidth - margin * 2, 18, 2, 2, "F");
-      doc.setTextColor(30, 64, 175); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text(report.totalLabel.toUpperCase(), margin + 5, 55);
-      doc.setTextColor(report.total < 0 ? 190 : 15, report.total < 0 ? 24 : 23, report.total < 0 ? 93 : 42); doc.setFontSize(15); doc.text(`INR ${amount(report.total)}`, margin + 5, 62);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(71, 85, 105); doc.text("UNAUDITED - subject to verification by the society accountant / auditor", pageWidth - margin - 5, 59, { align: "right" });
+      const metricGap = 3; const metricWidth = (pageWidth - margin * 2 - metricGap * (summary.metrics.length - 1)) / summary.metrics.length;
+      summary.metrics.forEach((metric, index) => { const x = margin + index * (metricWidth + metricGap); doc.setFillColor(239, 246, 255); doc.roundedRect(x, 48, metricWidth, 18, 2, 2, "F"); doc.setTextColor(30, 64, 175); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.text(metric.label.toUpperCase(), x + 4, 55); doc.setTextColor(metric.value < 0 ? 190 : 15, metric.value < 0 ? 24 : 23, metric.value < 0 ? 93 : 42); doc.setFontSize(12); doc.text(`INR ${amount(metric.value)}`, x + 4, 62); });
 
       let cursorY = 74;
       const tableBase = {
@@ -192,16 +212,16 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
         styles: { fontSize: orientation === "landscape" ? 7.2 : 8, cellPadding: 2.2, overflow: "linebreak" as const, textColor: [30, 41, 59] as [number, number, number], lineColor: [226, 232, 240] as [number, number, number], lineWidth: 0.15 },
         headStyles: { fillColor: [29, 78, 216] as [number, number, number], textColor: 255, fontStyle: "bold" as const, halign: "left" as const },
         alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
-        didDrawPage: ({ pageNumber }: { pageNumber: number }) => { drawPageFrame(); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.text(`Page ${pageNumber}`, pageWidth - margin, pageHeight - 6, { align: "right" }); doc.text("Confidential society record", margin, pageHeight - 6); },
+        didDrawPage: ({ pageNumber }: { pageNumber: number }) => { drawPageFrame(); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.text(`Page ${pageNumber}`, pageWidth - margin, pageHeight - 6, { align: "right" }); doc.text("UNAUDITED - Confidential society record", margin, pageHeight - 6); },
       };
-      if (summaryRows.length) {
+      if (summary.rows.length) {
         doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Summary", margin, cursorY);
-        autoTable(doc, { ...tableBase, startY: cursorY + 3, head: [report.headers], body: summaryRows });
+        autoTable(doc, { ...tableBase, startY: cursorY + 3, head: [summary.headers], body: summary.rows, columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } } });
         cursorY = ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 9;
       }
       if (filters.detail === "detailed") {
         if (cursorY > pageHeight - 45) { doc.addPage(); cursorY = 34; }
-        doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(summaryRows.length ? "Detailed Records" : "Records", margin, cursorY);
+        doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(summary.rows.length ? "Detailed Records" : "Records", margin, cursorY);
         autoTable(doc, { ...tableBase, startY: cursorY + 3, head: [report.headers], body: detailRows.length ? detailRows : [["No detailed records available", ...report.headers.slice(1).map(() => "")]] });
       }
       let finalY = ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 12;
@@ -216,6 +236,7 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
     setDownloading(`${key}-excel`);
     try {
       const report = preparedReport(key);
+      const simple = simpleSummary(key, report);
       const cellXml = (cell: string | number, style = "Cell") => `<Cell ss:StyleID="${style}"><Data ss:Type="${typeof cell === "number" ? "Number" : "String"}">${xmlText(cell)}</Data></Cell>`;
       const rowXml = (cells: (string | number)[], style = "Cell") => `<Row>${cells.map((cell) => cellXml(cell, style)).join("")}</Row>`;
       const columnsXml = (count: number) => Array.from({ length: count }, (_, index) => `<Column ss:Width="${index === 0 ? 95 : index >= count - 3 ? 90 : 125}"/>`).join("");
@@ -224,11 +245,11 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
         return `<Worksheet ss:Name="${xmlText(name.slice(0, 31))}"><Table>${columnsXml(headers.length)}${titleRows}${rowXml(headers, "Header")}${rows.length ? rows.map((row) => rowXml(row)).join("") : rowXml(["No records available", ...headers.slice(1).map(() => "")])}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>${includeTitle ? 7 : 1}</SplitHorizontal><TopRowBottomPane>${includeTitle ? 7 : 1}</TopRowBottomPane><ActivePane>2</ActivePane><ProtectObjects>False</ProtectObjects><ProtectScenarios>False</ProtectScenarios></WorksheetOptions></Worksheet>`;
       };
       const summaryRows: (string | number)[][] = [["Society", society?.name || "Society Management"], ["Address", [society?.address, society?.city, society?.state, society?.pin_code].filter(Boolean).join(", ") || "-"], ["Report", report.title], ["Period", reportPeriod(filters.period, financialYearLabel, financialYearFrom, financialYearTo)], ["Generated", new Date().toLocaleString("en-IN")], [report.totalLabel, report.total], ["Status", "Unaudited - verify with society accountant / auditor"], ["Treasurer / Authorized Signatory", ""], ["Secretary / Chairman", ""]];
-      const reportSummaryRows = report.rows.filter(isSummaryRow);
       const reportDetailRows = report.rows.filter((row) => !isSummaryRow(row));
+      const overviewRows: (string | number)[][] = simple.metrics.map((metric) => [metric.label, metric.value]);
       const sheets = [
-        sheetXml("Report Summary", ["Particular", "Value"], summaryRows, true),
-        sheetXml("Category Summary", report.headers, reportSummaryRows),
+        sheetXml("Report Summary", ["Particular", "Value"], [...summaryRows, ["", ""], ...overviewRows], true),
+        sheetXml("Category Summary", simple.headers, simple.rows),
         ...(filters.detail === "detailed" ? [sheetXml("Detailed Records", report.headers, reportDetailRows)] : []),
       ];
 
