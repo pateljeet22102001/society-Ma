@@ -60,6 +60,7 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
         ["SUMMARY", "Pending from flats", "-", "-", "-", amount(pendingTotal)],
         ["SUMMARY", "Donated item value (non-cash)", "-", "-", "-", amount(itemValue)],
         ...flatRows.map((r) => ["FLAT", `${r.flat?.flat_number || "-"} - ${r.flat?.owner_name || "-"}`, r.status.replaceAll("_", " "), dateText(r.payment_date || r.due_date), `Paid ${amount(r.paid_amount)} / Pending ${amount(r.pending_amount)}`, amount(r.amount)]),
+        ...payments.map((r) => ["FLAT PAYMENT", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), dateText(r.payment_date), r.reference_number || "-", amount(r.amount)]),
         ...cash.map((r) => ["CASH AAVAK", r.category, r.donor_name || "Anonymous", dateText(r.contribution_date), r.payment_mode?.replaceAll("_", " ") || "-", amount(Number(r.amount))]),
         ...items.map((r) => ["ITEM DONATION", r.item_name || r.category, r.donor_name || "Anonymous", dateText(r.contribution_date), `${r.quantity || 0} ${r.unit || ""}`, amount(r.total_value)]),
         ...javak.map((r) => ["JAVAK", r.category, r.vendor_name || "-", dateText(r.expense_date), r.payment_mode.replaceAll("_", " "), amount(r.amount)]),
@@ -67,19 +68,32 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
       return { title: `${event?.name || "Event"} ${event?.event_year || ""} Hisab`, subtitle: `Separate event report | Pending INR ${amount(pendingTotal)} | Item value INR ${amount(itemValue)}`, headers: ["Type", "Details", "Person / Status", "Date", "Information", "Value (INR)"], rows, totalLabel: "Event Cash Balance", total: flatCollected + cashDonations - expensesTotal };
     }
     if (key === "income") {
-      const rows = [
+      const categories = new Map<string, number>();
+      regularIncome.forEach((r) => categories.set(r.category?.name || "Other Income", (categories.get(r.category?.name || "Other Income") || 0) + Number(r.amount)));
+      categories.set("Maintenance Collection", maintenancePayments.reduce((sum, r) => sum + Number(r.amount), 0));
+      const rows: (string | number)[][] = [
+        ...[...categories.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, total]) => ["SUMMARY", "Category subtotal", name, "-", "-", "-", "-", amount(total)]),
         ...regularIncome.map((r) => [dateText(r.transaction_date), "Regular Aavak", r.category?.name || "-", r.person_name || "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.receipt_number || r.reference_number || "-", amount(r.amount)]),
-        ...maintenancePayments.map((r) => [dateText(r.payment_date), "Maintenance", "Maintenance payment", "-", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
-      ].sort((a, b) => String(b[0]).localeCompare(String(a[0])));
-      return { title: "Society Aavak Report", subtitle: "Regular income and maintenance received; events are reported separately", headers: ["Date", "Source", "Category", "Person", "Flat", "Mode", "Receipt / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Aavak", total: incomeTotal };
+        ...maintenancePayments.map((r) => [dateText(r.payment_date), "Maintenance", "Maintenance payment", "Society member", r.flat?.flat_number || "-", r.payment_mode.replaceAll("_", " "), r.reference_number || "-", amount(r.amount)]),
+      ];
+      return { title: "Society Aavak Report (Unaudited)", subtitle: "Category summary and complete receipts; event accounts reported separately", headers: ["Date", "Source", "Category", "Person", "Flat", "Mode", "Receipt / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Aavak", total: incomeTotal };
     }
     if (key === "expense") {
-      const rows = expenses.map((r) => [dateText(r.transaction_date), "Society Javak", r.category?.name || "-", r.vendor_name || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", amount(r.amount)]);
-      return { title: "Society Javak Report", subtitle: "Regular society expenses; events are reported separately", headers: ["Date", "Source", "Category", "Vendor", "Mode", "Bill / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Javak", total: expenseTotal };
+      const categories = new Map<string, number>(); expenses.forEach((r) => categories.set(r.category?.name || "Other Expense", (categories.get(r.category?.name || "Other Expense") || 0) + Number(r.amount)));
+      const rows: (string | number)[][] = [
+        ...[...categories.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, total]) => ["SUMMARY", "Category subtotal", name, "-", "-", "-", "-", amount(total)]),
+        ...expenses.map((r) => [dateText(r.transaction_date), "Society Javak", r.category?.name || "-", r.vendor_name || "-", r.description || r.notes || "-", r.payment_mode.replaceAll("_", " "), r.bill_number || r.reference_number || "-", amount(r.amount)]),
+      ];
+      return { title: "Society Javak Report (Unaudited)", subtitle: "Category summary and complete payments; event accounts reported separately", headers: ["Date", "Source", "Category", "Paid To", "Particulars", "Mode", "Bill / Ref", "Amount (INR)"], rows, totalLabel: "Total Society Javak", total: expenseTotal };
     }
     if (key === "maintenance" || key === "pending") {
       const source = key === "pending" ? yearBills.filter((r) => Number(r.pending_amount) > 0) : yearBills.filter((r) => Number(r.paid_amount) > 0);
-      return { title: key === "pending" ? "Pending Maintenance Report" : "Maintenance Collection Report", subtitle: `Financial Year ${financialYearLabel} flat-wise maintenance`, headers: ["Flat", "Owner", "Wing", "Period", "Due", "Paid Date", "Status", "Total", "Paid", "Pending"], rows: source.map((r) => [r.flat?.flat_number || "-", r.flat?.owner_name || "-", r.flat?.wing?.name || "-", `${monthName(r.bill_month)} ${r.bill_year}${r.period_months > 1 ? ` (${r.period_months} months)` : ""}`, dateText(r.due_date), dateText(r.payment_date), r.status.replaceAll("_", " "), amount(r.total_amount), amount(r.paid_amount), amount(r.pending_amount)]), totalLabel: key === "pending" ? "Total Pending" : "Total Collected", total: key === "pending" ? pending : collected };
+      const wingTotals = new Map<string, number>(); source.forEach((r) => { const wing = r.flat?.wing?.name || "No Wing"; const value = key === "pending" ? Number(r.pending_amount) : Number(r.paid_amount); wingTotals.set(wing, (wingTotals.get(wing) || 0) + value); });
+      const rows: (string | number)[][] = [
+        ...[...wingTotals.entries()].map(([wing, total]) => ["SUMMARY", "-", wing, "Wing subtotal", "-", "-", "-", "-", key === "pending" ? "-" : amount(total), key === "pending" ? amount(total) : "-"]),
+        ...source.map((r) => [r.flat?.flat_number || "-", r.flat?.owner_name || "-", r.flat?.wing?.name || "-", `${monthName(r.bill_month)} ${r.bill_year}${r.period_months > 1 ? ` (${r.period_months} months)` : ""}`, dateText(r.due_date), dateText(r.payment_date), r.status.replaceAll("_", " "), amount(r.total_amount), amount(r.paid_amount), amount(r.pending_amount)]),
+      ];
+      return { title: key === "pending" ? "Pending Maintenance Report (Unaudited)" : "Maintenance Collection Report (Unaudited)", subtitle: `Financial Year ${financialYearLabel} wing and flat-wise details`, headers: ["Flat", "Owner", "Wing", "Period", "Due", "Paid Date", "Status", "Total", "Paid", "Pending"], rows, totalLabel: key === "pending" ? "Total Pending" : "Total Collected", total: key === "pending" ? pending : collected };
     }
     if (key === "yearly") {
       const fyIncome = regularIncome.filter((row) => inFinancialYear(row.transaction_date));
@@ -110,9 +124,15 @@ export function ReportsManager({ society, income, expenses, maintenance, mainten
       const current = periods.get(periodKey) || { label, regularIncome: 0, maintenance: 0, regularExpense: 0 }; current[field] += Number(value); periods.set(periodKey, current);
     };
     regularIncome.forEach((r) => add(r.transaction_date, "regularIncome", r.amount)); maintenancePayments.forEach((r) => add(r.payment_date, "maintenance", r.amount)); expenses.forEach((r) => add(r.transaction_date, "regularExpense", r.amount));
-    const rows = [...periods.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([, r]) => { const aavak = r.regularIncome + r.maintenance; return [r.label, amount(r.regularIncome), amount(r.maintenance), amount(aavak), amount(r.regularExpense), amount(aavak - r.regularExpense)]; });
-    const fyBalance = rows.reduce((sum, row) => sum + Number(row[5]), 0);
-    return { title: `Monthly Society Hisab FY ${financialYearLabel}`, subtitle: `1 April ${financialYearStart} to 31 March ${financialYearStart + 1}; events reported separately`, headers: ["Month", "Regular Aavak", "Maintenance", "Total Aavak", "Society Javak", "Cash Balance"], rows, totalLabel: "Financial Year Cash Balance", total: fyBalance };
+    const summaryRows: (string | number)[][] = [...periods.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, r]) => { const aavak = r.regularIncome + r.maintenance; return [r.label, "SUMMARY", "Monthly subtotal", "-", "-", amount(aavak), amount(r.regularExpense), amount(aavak - r.regularExpense)]; });
+    const details: { date: string; type: string; category: string; party: string; ref: string; receipt: number; payment: number }[] = [
+      ...regularIncome.filter((r) => inFinancialYear(r.transaction_date)).map((r) => ({ date: r.transaction_date, type: "RECEIPT", category: r.category?.name || "Income", party: `${r.person_name || "-"}${r.flat?.flat_number ? ` / ${r.flat.flat_number}` : ""}`, ref: r.receipt_number || r.reference_number || "-", receipt: Number(r.amount), payment: 0 })),
+      ...maintenancePayments.filter((r) => inFinancialYear(r.payment_date)).map((r) => ({ date: r.payment_date, type: "RECEIPT", category: "Maintenance", party: `Flat ${r.flat?.flat_number || "-"}`, ref: r.reference_number || "-", receipt: Number(r.amount), payment: 0 })),
+      ...expenses.filter((r) => inFinancialYear(r.transaction_date)).map((r) => ({ date: r.transaction_date, type: "PAYMENT", category: r.category?.name || "Expense", party: r.vendor_name || "-", ref: r.bill_number || r.reference_number || "-", receipt: 0, payment: Number(r.amount) })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    let monthlyRunning = 0;
+    const detailRows = details.map((r) => { monthlyRunning += r.receipt - r.payment; return [dateText(r.date), r.type, r.category, r.party, r.ref, amount(r.receipt), amount(r.payment), amount(monthlyRunning)]; });
+    return { title: `Monthly Society Hisab FY ${financialYearLabel} (Unaudited)`, subtitle: `Month summaries and complete receipt/payment register; events reported separately`, headers: ["Date / Month", "Type", "Category / Particulars", "Party / Flat", "Receipt / Bill Ref", "Receipt", "Payment", "Running Balance"], rows: [...summaryRows, ...detailRows], totalLabel: "Financial Year Cash Balance", total: monthlyRunning };
   }
 
   async function downloadPdf(key: ReportKey) {
