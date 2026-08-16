@@ -41,7 +41,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
     const amount = parsed.data.amount;
     const lateFeeDefault = parsed.data.late_fee ?? settings?.late_fee ?? 0;
     const dueDay = settings?.due_day ?? 10;
-    const periodMonths = Number(settings?.billing_frequency_months || 1) as 1 | 3 | 6;
+    const periodMonths = parsed.data.period_months;
 
     const { data: flats, error: flatsError } = await supabase
       .from("flats")
@@ -54,17 +54,37 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
       return { success: false, message: "No active flats found" };
     }
 
+    const { data: existingBills, error: existingError } = await supabase
+      .from("maintenance_bills")
+      .select("flat_id,bill_month,bill_year,period_months")
+      .eq("society_id", society.id);
+    if (existingError) throw existingError;
+    const requestedStart = parsed.data.bill_year * 12 + parsed.data.bill_month - 1;
+    const requestedEnd = requestedStart + periodMonths - 1;
+
     const dueDate = new Date(parsed.data.bill_year, parsed.data.bill_month - 1, dueDay)
       .toISOString()
       .slice(0, 10);
 
     const bills = [];
+    let skippedOverlaps = 0;
 
     for (const flat of flats) {
+      const overlaps = (existingBills || []).some((existing) => {
+        if (existing.flat_id !== flat.id) return false;
+        const existingStart = Number(existing.bill_year) * 12 + Number(existing.bill_month) - 1;
+        const existingEnd = existingStart + Number(existing.period_months || 1) - 1;
+        return requestedStart <= existingEnd && existingStart <= requestedEnd;
+      });
+      if (overlaps) {
+        skippedOverlaps += 1;
+        continue;
+      }
       const { data: previous } = await supabase
         .from("maintenance_bills")
         .select("pending_amount")
         .eq("flat_id", flat.id)
+        .eq("society_id", society.id)
         .order("bill_year", { ascending: false })
         .order("bill_month", { ascending: false })
         .limit(1)
@@ -92,6 +112,10 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
       });
     }
 
+    if (!bills.length) {
+      return { success: false, message: "This period overlaps existing maintenance bills for all active flats" };
+    }
+
     const { error } = await supabase.from("maintenance_bills").upsert(bills, {
       onConflict: "flat_id,bill_month,bill_year",
       ignoreDuplicates: true,
@@ -103,7 +127,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
     revalidatePath("/dashboard");
     return {
       success: true,
-      message: `Generated ${periodMonths}-month maintenance for ${bills.length} flats`,
+      message: `Generated ${periodMonths}-month maintenance for ${bills.length} flats${skippedOverlaps ? `; skipped ${skippedOverlaps} overlapping flats` : ""}`,
     };
   } catch (error) {
     return {

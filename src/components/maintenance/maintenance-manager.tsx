@@ -73,6 +73,7 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
     defaultValues: {
       bill_month: new Date().getMonth() + 1,
       bill_year: new Date().getFullYear(),
+      period_months: frequencyMonths,
       amount: Number(settings?.default_amount || 1500),
       late_fee: Number(settings?.late_fee || 0),
     },
@@ -85,7 +86,8 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
 
   const watchedStartMonth = Number(generateForm.watch("bill_month") || 1);
   const watchedStartYear = Number(generateForm.watch("bill_year") || new Date().getFullYear());
-  const previewPeriod = billingPeriodLabel(watchedStartMonth, watchedStartYear, frequencyMonths);
+  const watchedPeriodMonths = Number(generateForm.watch("period_months") || frequencyMonths);
+  const previewPeriod = billingPeriodLabel(watchedStartMonth, watchedStartYear, watchedPeriodMonths);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -368,21 +370,20 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
               {...generateForm.register("bill_month")}
             />
             <Input label="Year" type="number" {...generateForm.register("bill_year")} />
+            <Select
+              label="Months Covered"
+              options={[...BILLING_FREQUENCIES]}
+              {...generateForm.register("period_months")}
+            />
             <Input
-              label={
-                frequencyMonths === 3
-                  ? "Amount (full 3 months)"
-                  : frequencyMonths === 6
-                    ? "Amount (full 6 months)"
-                    : "Amount (1 month)"
-              }
+              label={`Total amount (${watchedPeriodMonths} ${watchedPeriodMonths === 1 ? "month" : "months"})`}
               type="number"
               {...generateForm.register("amount")}
             />
             <Input label="Late Fee" type="number" {...generateForm.register("late_fee")} />
           </div>
           <p className="text-xs text-slate-500">
-            Frequency from Settings: {BILLING_FREQUENCIES.map((f) => f.label).join(" / ")}
+            Default from Settings: {billingFrequencyLabel(frequencyMonths)}. Changing this bill does not change old bills.
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>

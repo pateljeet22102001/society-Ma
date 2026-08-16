@@ -46,7 +46,7 @@ export default async function MaintenancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Maintenance"
-        description="Generate flat-wise monthly bills, collect payments, and track dues."
+        description="Generate flexible 1-12 month flat-wise bills, collect payments, and track dues."
       />
       <Suspense fallback={<PageSkeleton />}>
         <MaintenanceManager

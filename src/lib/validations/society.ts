@@ -46,7 +46,9 @@ export const societySettingsSchema = z.object({
 export const maintenanceSettingsSchema = z.object({
   billing_frequency_months: z.coerce
     .number()
-    .refine((v) => [1, 3, 6].includes(v), "Select 1, 3, or 6 months"),
+    .int()
+    .min(1, "Minimum period is 1 month")
+    .max(12, "Maximum period is 12 months"),
   default_amount: z.coerce.number().min(0, "Amount cannot be negative"),
   due_day: z.coerce.number().int().min(1).max(28),
   late_fee: z.coerce.number().min(0, "Late fee cannot be negative"),

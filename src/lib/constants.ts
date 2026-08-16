@@ -31,16 +31,18 @@ export const MONTHS = Array.from({ length: 12 }, (_, i) => ({
   label: new Date(2000, i, 1).toLocaleString("en-IN", { month: "long" }),
 }));
 
-export const BILLING_FREQUENCIES = [
-  { value: "1", label: "Every 1 Month (Monthly)", months: 1 as const },
-  { value: "3", label: "Every 3 Months (Quarterly)", months: 3 as const },
-  { value: "6", label: "Every 6 Months (Half-Yearly)", months: 6 as const },
-] as const;
+export const BILLING_FREQUENCIES = Array.from({ length: 12 }, (_, index) => {
+  const months = index + 1;
+  const special = months === 1 ? "Monthly" : months === 3 ? "Quarterly" : months === 6 ? "Half-Yearly" : months === 12 ? "Yearly" : "Custom";
+  return { value: String(months), label: `${months} ${months === 1 ? "Month" : "Months"} (${special})`, months };
+});
 
 export function billingFrequencyLabel(months: number) {
   if (months === 3) return "Quarterly (3 months)";
   if (months === 6) return "Half-Yearly (6 months)";
-  return "Monthly (1 month)";
+  if (months === 12) return "Yearly (12 months)";
+  if (months === 1) return "Monthly (1 month)";
+  return `Custom (${months} months)`;
 }
 
 export const PAGE_SIZE = 10;

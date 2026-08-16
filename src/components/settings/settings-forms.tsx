@@ -123,7 +123,7 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
       <Card>
         <CardHeader
           title="Maintenance Settings"
-          description="Set how often maintenance is charged: monthly, every 3 months, or every 6 months."
+          description="Choose a default period from 1 to 12 months. You can override it whenever bills are generated."
         />
         <CardContent>
           <form className="space-y-4" onSubmit={maintenanceForm.handleSubmit(onSaveMaintenance)}>
@@ -135,17 +135,11 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
             />
             <p className="text-sm text-slate-500">
               Selected: <span className="font-medium text-slate-700">{billingFrequencyLabel(watchedFrequency)}</span>.
-              Amount below is for one full billing period (not per month).
+              The amount below is the default total for one full billing period, not a monthly rate.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Input
-                label={
-                  watchedFrequency === 3
-                    ? "Amount (for 3 months)"
-                    : watchedFrequency === 6
-                      ? "Amount (for 6 months)"
-                      : "Amount (for 1 month)"
-                }
+                label={`Default total (${watchedFrequency} ${watchedFrequency === 1 ? "month" : "months"})`}
                 type="number"
                 {...maintenanceForm.register("default_amount")}
               />

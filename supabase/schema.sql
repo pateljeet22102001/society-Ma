@@ -216,7 +216,7 @@ create table if not exists public.maintenance_settings (
   default_amount numeric(12, 2) not null default 1500 check (default_amount >= 0),
   due_day integer not null default 10 check (due_day between 1 and 28),
   late_fee numeric(12, 2) not null default 0 check (late_fee >= 0),
-  billing_frequency_months integer not null default 1 check (billing_frequency_months in (1, 3, 6)),
+  billing_frequency_months integer not null default 1 check (billing_frequency_months between 1 and 12),
   created_by uuid references public.profiles (id),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -233,7 +233,7 @@ create table if not exists public.maintenance_bills (
   flat_id uuid not null references public.flats (id) on delete cascade,
   bill_month integer not null check (bill_month between 1 and 12),
   bill_year integer not null check (bill_year >= 2000),
-  period_months integer not null default 1 check (period_months in (1, 3, 6)),
+  period_months integer not null default 1 check (period_months between 1 and 12),
   maintenance_amount numeric(12, 2) not null check (maintenance_amount >= 0),
   previous_outstanding numeric(12, 2) not null default 0 check (previous_outstanding >= 0),
   late_fee numeric(12, 2) not null default 0 check (late_fee >= 0),

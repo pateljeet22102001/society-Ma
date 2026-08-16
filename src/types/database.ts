@@ -131,7 +131,7 @@ export interface ExpenseTransaction {
   category?: ExpenseCategory | null;
 }
 
-export type BillingFrequencyMonths = 1 | 3 | 6;
+export type BillingFrequencyMonths = number;
 
 export interface MaintenanceSettings {
   id: string;

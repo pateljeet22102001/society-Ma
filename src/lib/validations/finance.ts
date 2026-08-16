@@ -39,6 +39,7 @@ export type ExpenseCategoryInput = z.infer<typeof expenseCategorySchema>;
 export const generateMaintenanceSchema = z.object({
   bill_month: z.coerce.number().int().min(1).max(12),
   bill_year: z.coerce.number().int().min(2000),
+  period_months: z.coerce.number().int().min(1).max(12),
   amount: z.coerce.number().min(0),
   late_fee: z.coerce.number().min(0),
 });
