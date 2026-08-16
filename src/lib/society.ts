@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Society, SocietyMemberRole } from "@/types/database";
+import { cookies } from "next/headers";
 
 export const FINANCE_ROLES: readonly SocietyMemberRole[] = [
   "admin", "chairman", "treasurer", "operator",
@@ -42,6 +43,17 @@ export async function getCurrentUser() {
 export async function requireCurrentUser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized. Please sign in again.");
+  return user;
+}
+
+/** Requires a password confirmation completed during the previous 10 minutes. */
+export async function requireRecentAuthentication() {
+  const user = await requireCurrentUser();
+  const value = (await cookies()).get("society_recent_auth")?.value;
+  const [userId, confirmedAt] = value?.split(":") || [];
+  if (userId !== user.id || Date.now() - Number(confirmedAt) > 10 * 60 * 1000) {
+    throw new Error("PASSWORD_CONFIRMATION_REQUIRED");
+  }
   return user;
 }
 

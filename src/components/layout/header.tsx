@@ -34,6 +34,8 @@ export function Header({
       const supabase = createClient();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      localStorage.removeItem("society:session-started");
+      localStorage.removeItem("society:last-activity");
       toast.success("Logged out successfully");
       router.push("/login");
       router.refresh();

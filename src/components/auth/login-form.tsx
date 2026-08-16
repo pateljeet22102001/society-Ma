@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -17,6 +17,14 @@ export function LoginForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const message = localStorage.getItem("society:logout-message");
+    if (message) {
+      localStorage.removeItem("society:logout-message");
+      toast.info(message);
+    }
+  }, []);
 
   const {
     register,
@@ -43,6 +51,11 @@ export function LoginForm() {
         setServerError(error.message);
         return;
       }
+      // This timestamp is intentionally captured after the user-triggered login succeeds.
+      // eslint-disable-next-line react-hooks/purity
+      const loginTime = Date.now();
+      localStorage.setItem("society:session-started", String(loginTime));
+      localStorage.setItem("society:last-activity", String(loginTime));
       toast.success("Login successful");
       router.push("/dashboard");
       router.refresh();

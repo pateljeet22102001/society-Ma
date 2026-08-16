@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PasswordConfirmDialog } from "@/components/auth/password-confirm-dialog";
 
 interface SettingsFormsProps {
   society: Society | null;
@@ -31,6 +32,9 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
   const router = useRouter();
   const [savingSociety, setSavingSociety] = useState(false);
   const [savingMaintenance, setSavingMaintenance] = useState(false);
+  const [confirming, setConfirming] = useState<"society" | "maintenance" | null>(null);
+  const [pendingSociety, setPendingSociety] = useState<SocietySettingsInput | null>(null);
+  const [pendingMaintenance, setPendingMaintenance] = useState<MaintenanceSettingsInput | null>(null);
 
   const societyForm = useForm<SocietySettingsInput>({
     resolver: zodResolver(societySettingsSchema),
@@ -65,11 +69,16 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
 
   const watchedFrequency = Number(maintenanceForm.watch("billing_frequency_months") || 1);
 
-  async function onSaveSociety(values: SocietySettingsInput) {
+  async function saveSociety(values: SocietySettingsInput) {
     setSavingSociety(true);
     const result = await saveSocietySettingsAction(values);
     setSavingSociety(false);
     if (!result.success) {
+      if (result.message === "PASSWORD_CONFIRMATION_REQUIRED") {
+        setPendingSociety(values);
+        setConfirming("society");
+        return;
+      }
       toast.error(result.message);
       return;
     }
@@ -77,11 +86,18 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     router.refresh();
   }
 
-  async function onSaveMaintenance(values: MaintenanceSettingsInput) {
+  async function onSaveSociety(values: SocietySettingsInput) { await saveSociety(values); }
+
+  async function saveMaintenance(values: MaintenanceSettingsInput) {
     setSavingMaintenance(true);
     const result = await saveMaintenanceSettingsAction(values);
     setSavingMaintenance(false);
     if (!result.success) {
+      if (result.message === "PASSWORD_CONFIRMATION_REQUIRED") {
+        setPendingMaintenance(values);
+        setConfirming("maintenance");
+        return;
+      }
       toast.error(result.message);
       return;
     }
@@ -89,8 +105,18 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     router.refresh();
   }
 
+  async function onSaveMaintenance(values: MaintenanceSettingsInput) { await saveMaintenance(values); }
+
   return (
     <div className="space-y-5">
+      <PasswordConfirmDialog
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        onConfirmed={async () => {
+          if (confirming === "society" && pendingSociety) await saveSociety(pendingSociety);
+          if (confirming === "maintenance" && pendingMaintenance) await saveMaintenance(pendingMaintenance);
+        }}
+      />
       <Card>
         <CardHeader
           title="Society Settings"

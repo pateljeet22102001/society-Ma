@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getPrimarySociety, requireCurrentUser, requireSocietyRole, SETTINGS_ROLES } from "@/lib/society";
+import { getPrimarySociety, requireCurrentUser, requireRecentAuthentication, requireSocietyRole, SETTINGS_ROLES } from "@/lib/society";
 import {
   maintenanceSettingsSchema,
   societySettingsSchema,
@@ -18,6 +18,7 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
   }
 
   try {
+    await requireRecentAuthentication();
     const supabase = await createClient();
     const user = await requireCurrentUser();
     const existing = await getPrimarySociety();
@@ -72,6 +73,7 @@ export async function saveMaintenanceSettingsAction(input: unknown): Promise<Act
   }
 
   try {
+    await requireRecentAuthentication();
     const supabase = await createClient();
     const { society, user } = await requireSocietyRole(SETTINGS_ROLES);
 

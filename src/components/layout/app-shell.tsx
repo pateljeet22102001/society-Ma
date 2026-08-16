@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { SessionGuard } from "@/components/auth/session-guard";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ export function AppShell({ children, userEmail, userName, societyName }: AppShel
 
   return (
     <div className="flex min-h-screen bg-surface text-slate-900">
+      <SessionGuard />
       <Sidebar
         open={mobileOpen}
         collapsed={collapsed}
