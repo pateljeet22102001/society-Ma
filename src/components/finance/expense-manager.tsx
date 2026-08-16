@@ -147,8 +147,10 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
 
   async function confirmDelete() {
     if (!deleting) return;
+    const reason = window.prompt("Enter the reason for voiding this expense voucher:");
+    if (!reason?.trim()) return;
     setLoading(true);
-    const result = await deleteExpenseAction(deleting.id);
+    const result = await deleteExpenseAction(deleting.id, reason);
     setLoading(false);
     if (!result.success) {
       toast.error(result.message);
@@ -255,8 +257,9 @@ export function ExpenseManager({ items, categories }: ExpenseManagerProps) {
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
-        title="Delete expense?"
-        description="This expense record will be permanently deleted."
+        title="Void expense voucher?"
+        description="The voucher will remain in the audit history and will be excluded from totals. A reason is required."
+        confirmLabel="Continue"
         loading={loading}
         onConfirm={confirmDelete}
       />

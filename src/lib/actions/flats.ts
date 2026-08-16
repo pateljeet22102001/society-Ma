@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, requireSociety } from "@/lib/society";
+import { requireSocietyRole, SETTINGS_ROLES } from "@/lib/society";
 import { flatSchema } from "@/lib/validations/society";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -16,8 +16,15 @@ export async function createFlatAction(input: unknown): Promise<ActionResult> {
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(SETTINGS_ROLES);
+
+    const { data: wing } = await supabase
+      .from("wings")
+      .select("id")
+      .eq("id", parsed.data.wing_id)
+      .eq("society_id", society.id)
+      .maybeSingle();
+    if (!wing) return { success: false, message: "Invalid wing for this society" };
 
     const { error } = await supabase.from("flats").insert({
       society_id: society.id,
@@ -31,7 +38,7 @@ export async function createFlatAction(input: unknown): Promise<ActionResult> {
       members_count: parsed.data.members_count,
       status: parsed.data.status,
       notes: parsed.data.notes || null,
-      created_by: user?.id ?? null,
+      created_by: user.id,
     });
 
     if (error) throw error;
@@ -39,12 +46,14 @@ export async function createFlatAction(input: unknown): Promise<ActionResult> {
     const { count } = await supabase
       .from("flats")
       .select("*", { count: "exact", head: true })
-      .eq("wing_id", parsed.data.wing_id);
+      .eq("wing_id", parsed.data.wing_id)
+      .eq("society_id", society.id);
 
     await supabase
       .from("wings")
       .update({ total_flats: count || 0 })
-      .eq("id", parsed.data.wing_id);
+      .eq("id", parsed.data.wing_id)
+      .eq("society_id", society.id);
 
     revalidatePath("/society/flats");
     revalidatePath("/society/wings");
@@ -63,6 +72,14 @@ export async function updateFlatAction(id: string, input: unknown): Promise<Acti
 
   try {
     const supabase = await createClient();
+    const { society } = await requireSocietyRole(SETTINGS_ROLES);
+    const { data: wing } = await supabase
+      .from("wings")
+      .select("id")
+      .eq("id", parsed.data.wing_id)
+      .eq("society_id", society.id)
+      .maybeSingle();
+    if (!wing) return { success: false, message: "Invalid wing for this society" };
     const { error } = await supabase
       .from("flats")
       .update({
@@ -77,7 +94,8 @@ export async function updateFlatAction(id: string, input: unknown): Promise<Acti
         status: parsed.data.status,
         notes: parsed.data.notes || null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("society_id", society.id);
 
     if (error) throw error;
     revalidatePath("/society/flats");
@@ -93,7 +111,8 @@ export async function toggleFlatStatusAction(
 ): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("flats").update({ status }).eq("id", id);
+    const { society } = await requireSocietyRole(SETTINGS_ROLES);
+    const { error } = await supabase.from("flats").update({ status }).eq("id", id).eq("society_id", society.id);
     if (error) throw error;
     revalidatePath("/society/flats");
     revalidatePath("/dashboard");
@@ -106,16 +125,18 @@ export async function toggleFlatStatusAction(
 export async function deleteFlatAction(id: string): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { data: flat } = await supabase.from("flats").select("wing_id").eq("id", id).single();
-    const { error } = await supabase.from("flats").delete().eq("id", id);
+    const { society } = await requireSocietyRole(SETTINGS_ROLES);
+    const { data: flat } = await supabase.from("flats").select("wing_id").eq("id", id).eq("society_id", society.id).single();
+    const { error } = await supabase.from("flats").delete().eq("id", id).eq("society_id", society.id);
     if (error) throw error;
 
     if (flat?.wing_id) {
       const { count } = await supabase
         .from("flats")
         .select("*", { count: "exact", head: true })
-        .eq("wing_id", flat.wing_id);
-      await supabase.from("wings").update({ total_flats: count || 0 }).eq("id", flat.wing_id);
+        .eq("wing_id", flat.wing_id)
+        .eq("society_id", society.id);
+      await supabase.from("wings").update({ total_flats: count || 0 }).eq("id", flat.wing_id).eq("society_id", society.id);
     }
 
     revalidatePath("/society/flats");

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireSociety, getCurrentUser } from "@/lib/society";
+import { requireSocietyRole, SETTINGS_ROLES } from "@/lib/society";
 import { wingSchema } from "@/lib/validations/society";
 import { generateFlatNumbers, getErrorMessage } from "@/lib/utils";
 
@@ -16,8 +16,7 @@ export async function createWingAction(input: unknown): Promise<ActionResult> {
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(SETTINGS_ROLES);
 
     const { data: wing, error } = await supabase
       .from("wings")
@@ -27,7 +26,7 @@ export async function createWingAction(input: unknown): Promise<ActionResult> {
         total_flats: parsed.data.total_flats,
         description: parsed.data.description || null,
         status: parsed.data.status,
-        created_by: user?.id ?? null,
+        created_by: user.id,
       })
       .select("*")
       .single();
@@ -41,7 +40,7 @@ export async function createWingAction(input: unknown): Promise<ActionResult> {
       occupancy_type: "vacant" as const,
       members_count: 0,
       status: "active" as const,
-      created_by: user?.id ?? null,
+      created_by: user.id,
     }));
 
     if (flats.length) {
@@ -66,6 +65,7 @@ export async function updateWingAction(id: string, input: unknown): Promise<Acti
 
   try {
     const supabase = await createClient();
+    const { society } = await requireSocietyRole(SETTINGS_ROLES);
     const { error } = await supabase
       .from("wings")
       .update({
@@ -73,7 +73,8 @@ export async function updateWingAction(id: string, input: unknown): Promise<Acti
         description: parsed.data.description || null,
         status: parsed.data.status,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("society_id", society.id);
 
     if (error) throw error;
     revalidatePath("/society/wings");
@@ -87,7 +88,8 @@ export async function updateWingAction(id: string, input: unknown): Promise<Acti
 export async function deleteWingAction(id: string): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("wings").delete().eq("id", id);
+    const { society } = await requireSocietyRole(SETTINGS_ROLES);
+    const { error } = await supabase.from("wings").delete().eq("id", id).eq("society_id", society.id);
     if (error) throw error;
     revalidatePath("/society/wings");
     revalidatePath("/society/flats");

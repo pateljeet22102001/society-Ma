@@ -36,8 +36,8 @@ export async function getDashboardData() {
     recentExpenseRes,
     recentPaymentsRes,
   ] = await Promise.all([
-    supabase.from("income_transactions").select("amount, transaction_date").eq("society_id", society.id),
-    supabase.from("expense_transactions").select("amount, transaction_date").eq("society_id", society.id),
+    supabase.from("income_transactions").select("amount, transaction_date").eq("society_id", society.id).eq("status", "active"),
+    supabase.from("expense_transactions").select("amount, transaction_date").eq("society_id", society.id).eq("status", "active"),
     supabase.from("flats").select("id, status").eq("society_id", society.id),
     supabase
       .from("maintenance_bills")
@@ -47,12 +47,14 @@ export async function getDashboardData() {
       .from("income_transactions")
       .select("*, category:income_categories(*), flat:flats(flat_number)")
       .eq("society_id", society.id)
+      .eq("status", "active")
       .order("transaction_date", { ascending: false })
       .limit(5),
     supabase
       .from("expense_transactions")
       .select("*, category:expense_categories(*)")
       .eq("society_id", society.id)
+      .eq("status", "active")
       .order("transaction_date", { ascending: false })
       .limit(5),
     supabase

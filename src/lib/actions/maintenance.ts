@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, requireSociety } from "@/lib/society";
+import { DELETE_FINANCE_ROLES, FINANCE_ROLES, requireSocietyRole } from "@/lib/society";
 import {
   generateMaintenanceSchema,
   maintenancePaymentSchema,
@@ -30,8 +30,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(FINANCE_ROLES);
 
     const { data: settings } = await supabase
       .from("maintenance_settings")
@@ -89,7 +88,7 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
         due_date: dueDate,
         status: "pending" as const,
         notes: periodMonths > 1 ? `Covers ${periodMonths} months` : null,
-        created_by: user?.id ?? null,
+        created_by: user.id,
       });
     }
 
@@ -122,8 +121,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(FINANCE_ROLES);
     const dateWarning = financialYearWarning(parsed.data.payment_date);
     if (dateWarning && !confirmed) return { success: false, requiresConfirmation: true, message: dateWarning };
 
@@ -131,6 +129,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
       .from("maintenance_bills")
       .select("*")
       .eq("id", parsed.data.bill_id)
+      .eq("society_id", society.id)
       .single();
 
     if (billError || !bill) throw billError || new Error("Bill not found");
@@ -150,7 +149,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
       payment_mode: parsed.data.payment_mode,
       reference_number: parsed.data.reference_number || null,
       notes: parsed.data.notes || null,
-      created_by: user?.id ?? null,
+      created_by: user.id,
     });
 
     if (paymentError) throw paymentError;
@@ -167,7 +166,8 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
         payment_date: parsed.data.payment_date,
         status,
       })
-      .eq("id", bill.id);
+      .eq("id", bill.id)
+      .eq("society_id", society.id);
 
     if (updateError) throw updateError;
 
@@ -190,7 +190,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
         payment_mode: parsed.data.payment_mode,
         reference_number: parsed.data.reference_number || null,
         description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
-        created_by: user?.id ?? null,
+        created_by: user.id,
       });
     }
 
@@ -208,7 +208,7 @@ export async function undoLastMaintenancePaymentAction(billId: string): Promise<
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
+    const { society } = await requireSocietyRole(DELETE_FINANCE_ROLES);
 
     const { data: bill, error: billError } = await supabase
       .from("maintenance_bills")

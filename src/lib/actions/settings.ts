@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, getPrimarySociety } from "@/lib/society";
+import { getPrimarySociety, requireCurrentUser, requireSocietyRole, SETTINGS_ROLES } from "@/lib/society";
 import {
   maintenanceSettingsSchema,
   societySettingsSchema,
@@ -19,10 +19,11 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
 
   try {
     const supabase = await createClient();
-    const user = await getCurrentUser();
+    const user = await requireCurrentUser();
     const existing = await getPrimarySociety();
 
     if (existing) {
+      await requireSocietyRole(SETTINGS_ROLES);
       const { error } = await supabase
         .from("societies")
         .update({
@@ -39,7 +40,7 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
           ...parsed.data,
           email: parsed.data.email || null,
           logo_url: parsed.data.logo_url || null,
-          created_by: user?.id ?? null,
+          created_by: user.id,
         })
         .select("*")
         .single();
@@ -51,7 +52,7 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
         due_day: 10,
         late_fee: 100,
         billing_frequency_months: 1,
-        created_by: user?.id ?? null,
+        created_by: user.id,
       });
     }
 
@@ -72,11 +73,7 @@ export async function saveMaintenanceSettingsAction(input: unknown): Promise<Act
 
   try {
     const supabase = await createClient();
-    const society = await getPrimarySociety();
-    if (!society) {
-      return { success: false, message: "Create society details first" };
-    }
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(SETTINGS_ROLES);
 
     const { data: existing } = await supabase
       .from("maintenance_settings")
@@ -88,13 +85,14 @@ export async function saveMaintenanceSettingsAction(input: unknown): Promise<Act
       const { error } = await supabase
         .from("maintenance_settings")
         .update(parsed.data)
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .eq("society_id", society.id);
       if (error) throw error;
     } else {
       const { error } = await supabase.from("maintenance_settings").insert({
         society_id: society.id,
         ...parsed.data,
-        created_by: user?.id ?? null,
+        created_by: user.id,
       });
       if (error) throw error;
     }

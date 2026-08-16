@@ -1,5 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Society } from "@/types/database";
+import type { Society, SocietyMemberRole } from "@/types/database";
+
+export const FINANCE_ROLES: readonly SocietyMemberRole[] = [
+  "admin", "chairman", "treasurer", "operator",
+];
+export const DELETE_FINANCE_ROLES: readonly SocietyMemberRole[] = [
+  "admin", "chairman", "treasurer",
+];
+export const SETTINGS_ROLES: readonly SocietyMemberRole[] = ["admin", "chairman"];
 
 /** Returns the primary society for this Phase-1 single-society app. */
 export async function getPrimarySociety(): Promise<Society | null> {
@@ -29,4 +37,30 @@ export async function getCurrentUser() {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+export async function requireCurrentUser() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized. Please sign in again.");
+  return user;
+}
+
+/** Authorizes a Server Action independently from page and database RLS checks. */
+export async function requireSocietyRole(allowedRoles: readonly SocietyMemberRole[]) {
+  const user = await requireCurrentUser();
+  const society = await requireSociety();
+  const supabase = await createClient();
+  const { data: membership, error } = await supabase
+    .from("society_members")
+    .select("role,status")
+    .eq("society_id", society.id)
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error || !membership || !allowedRoles.includes(membership.role as SocietyMemberRole)) {
+    throw new Error("Forbidden. You do not have permission for this action.");
+  }
+
+  return { society, user, role: membership.role as SocietyMemberRole };
 }

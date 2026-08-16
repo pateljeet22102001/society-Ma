@@ -2,6 +2,13 @@ export type EntityStatus = "active" | "inactive";
 export type OccupancyType = "owner" | "tenant" | "vacant";
 export type PaymentMode = "cash" | "upi" | "bank_transfer" | "cheque" | "other";
 export type MaintenanceStatus = "paid" | "pending" | "partially_paid" | "overdue";
+export type SocietyMemberRole =
+  | "admin"
+  | "chairman"
+  | "treasurer"
+  | "operator"
+  | "viewer"
+  | "auditor";
 
 export interface Profile {
   id: string;
@@ -185,6 +192,16 @@ export interface DashboardStats {
   maintenancePending: number;
   paidFlats: number;
   pendingFlats: number;
+}
+
+export interface SocietyMember {
+  id: string;
+  society_id: string;
+  user_id: string;
+  role: SocietyMemberRole;
+  status: EntityStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SocietyEvent {

@@ -142,8 +142,10 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
 
   async function confirmDelete() {
     if (!deleting) return;
+    const reason = window.prompt("Enter the reason for voiding this income receipt:");
+    if (!reason?.trim()) return;
     setLoading(true);
-    const result = await deleteIncomeAction(deleting.id);
+    const result = await deleteIncomeAction(deleting.id, reason);
     setLoading(false);
     if (!result.success) {
       toast.error(result.message);
@@ -249,8 +251,9 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
-        title="Delete income?"
-        description="This income record will be permanently deleted."
+        title="Void income receipt?"
+        description="The receipt will remain in the audit history and will be excluded from totals. A reason is required."
+        confirmLabel="Continue"
         loading={loading}
         onConfirm={confirmDelete}
       />

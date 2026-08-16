@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, requireSociety } from "@/lib/society";
+import { DELETE_FINANCE_ROLES, FINANCE_ROLES, requireSocietyRole } from "@/lib/society";
 import { incomeCategorySchema, incomeSchema } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
 import { financialYearWarning } from "@/lib/financial-year";
@@ -18,7 +18,7 @@ export async function createIncomeCategoryAction(input: unknown): Promise<Action
   if (!parsed.success) return { success: false, message: parsed.error.issues[0]?.message };
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
+    const { society } = await requireSocietyRole(FINANCE_ROLES);
     const slug = categorySlug(parsed.data.name);
     if (!slug) return { success: false, message: "Enter a valid category name" };
     const { data: existing } = await supabase.from("income_categories").select("id").or(`society_id.is.null,society_id.eq.${society.id}`).eq("slug", slug).limit(1).maybeSingle();
@@ -40,8 +40,7 @@ export async function createIncomeAction(input: unknown, confirmed = false): Pro
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const user = await getCurrentUser();
+    const { society, user } = await requireSocietyRole(FINANCE_ROLES);
 
     const warnings: string[] = [];
     const dateWarning = financialYearWarning(parsed.data.transaction_date);
@@ -64,7 +63,7 @@ export async function createIncomeAction(input: unknown, confirmed = false): Pro
       reference_number: parsed.data.reference_number || null,
       description: parsed.data.description || null,
       receipt_number: null,
-      created_by: user?.id ?? null,
+      created_by: user.id,
     }).select("receipt_number").single();
 
     if (error) throw error;
@@ -84,7 +83,7 @@ export async function updateIncomeAction(id: string, input: unknown, confirmed =
 
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
+    const { society } = await requireSocietyRole(FINANCE_ROLES);
     const warnings: string[] = [];
     const dateWarning = financialYearWarning(parsed.data.transaction_date);
     if (dateWarning) warnings.push(dateWarning);
@@ -119,15 +118,17 @@ export async function updateIncomeAction(id: string, input: unknown, confirmed =
   }
 }
 
-export async function deleteIncomeAction(id: string): Promise<ActionResult> {
+export async function deleteIncomeAction(id: string, reason: string): Promise<ActionResult> {
+  const cancellationReason = reason.trim();
+  if (cancellationReason.length < 3) return { success: false, message: "Enter a cancellation reason" };
   try {
     const supabase = await createClient();
-    const society = await requireSociety();
-    const { error } = await supabase.from("income_transactions").delete().eq("id", id).eq("society_id", society.id);
+    const { society, user } = await requireSocietyRole(DELETE_FINANCE_ROLES);
+    const { error } = await supabase.from("income_transactions").update({ status: "inactive", cancelled_at: new Date().toISOString(), cancelled_by: user.id, cancellation_reason: cancellationReason }).eq("id", id).eq("society_id", society.id).eq("status", "active");
     if (error) throw error;
     revalidatePath("/income");
     revalidatePath("/dashboard");
-    return { success: true, message: "Income deleted" };
+    return { success: true, message: "Income receipt voided" };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to delete income") };
   }
