@@ -127,7 +127,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/society-backup" "$RUNNER_TEMP/supabase-$backup_date.tar.gz"
 
       - name: Upload encrypted verified backup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: supabase-backup-${{ github.run_id }}
           path: |
