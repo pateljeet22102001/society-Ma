@@ -1,9 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { forgotPasswordSchema, loginSchema } from "@/lib/validations/auth";
+import { forgotPasswordSchema } from "@/lib/validations/auth";
 import { getErrorMessage } from "@/lib/utils";
 
 export type ActionResult = {
@@ -33,37 +32,6 @@ export async function confirmPasswordAction(password: string): Promise<ActionRes
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Unable to confirm password") };
   }
-}
-
-export async function loginAction(
-  _prev: ActionResult,
-  formData: FormData,
-): Promise<ActionResult> {
-  const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-    rememberMe: formData.get("rememberMe") === "on",
-  });
-
-  if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message || "Invalid input" };
-  }
-
-  try {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: parsed.data.email,
-      password: parsed.data.password,
-    });
-
-    if (error) {
-      return { success: false, message: error.message };
-    }
-  } catch (error) {
-    return { success: false, message: getErrorMessage(error, "Login failed") };
-  }
-
-  redirect("/dashboard");
 }
 
 export async function forgotPasswordAction(
