@@ -1,0 +1,138 @@
+name: Supabase Daily Backup
+
+on:
+  schedule:
+    # Midnight in India (18:30 UTC). GitHub schedules can start a little late.
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup-and-verify:
+    name: Backup and test restoration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: restore_test_only
+      PGDATABASE: restore_test
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: restore_test_only
+          POSTGRES_DB: restore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d restore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_DB_URL" || { echo "Missing SUPABASE_DB_URL GitHub secret"; exit 1; }
+          test -n "$BACKUP_ENCRYPTION_PASSWORD" || { echo "Missing BACKUP_ENCRYPTION_PASSWORD GitHub secret"; exit 1; }
+          echo "::add-mask::$SUPABASE_DB_URL"
+          echo "::add-mask::$BACKUP_ENCRYPTION_PASSWORD"
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create logical backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/society-backup"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$RUNNER_TEMP/society-backup/schema.sql"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$RUNNER_TEMP/society-backup/data.sql" --data-only --use-copy
+          psql "$SUPABASE_DB_URL" --no-psqlrc --tuples-only --no-align \
+            --command "select id from auth.users order by id" \
+            > "$RUNNER_TEMP/society-backup/auth-user-ids.txt"
+          test -s "$RUNNER_TEMP/society-backup/schema.sql"
+          test -s "$RUNNER_TEMP/society-backup/data.sql"
+
+      - name: Prepare isolated restoration database
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+          create role anon nologin;
+          create role authenticated nologin;
+          create role service_role nologin bypassrls;
+          create schema if not exists auth;
+          create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+          create table if not exists auth.users (id uuid primary key);
+          SQL
+          while IFS= read -r user_id; do
+            if [ -n "$user_id" ]; then
+              psql --no-psqlrc --set ON_ERROR_STOP=1 \
+                --command "insert into auth.users (id) values ('$user_id'::uuid) on conflict do nothing"
+            fi
+          done < "$RUNNER_TEMP/society-backup/auth-user-ids.txt"
+
+      - name: Test restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --file "$RUNNER_TEMP/society-backup/schema.sql"
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --file "$RUNNER_TEMP/society-backup/data.sql"
+
+          expected_tables=(societies wings flats income_transactions expense_transactions maintenance_bills maintenance_payments events)
+          for table_name in "${expected_tables[@]}"; do
+            exists=$(psql --no-psqlrc --tuples-only --no-align \
+              --command "select to_regclass('public.$table_name') is not null")
+            test "$exists" = "t" || { echo "Restoration check failed: public.$table_name is missing"; exit 1; }
+          done
+
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --command "select count(*) as restored_societies from public.societies"
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --command "select count(*) as restored_flats from public.flats"
+          echo "Backup restoration test passed. The production database was not modified."
+
+      - name: Package and encrypt verified backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_date=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+          tar -C "$RUNNER_TEMP/society-backup" -czf "$RUNNER_TEMP/supabase-$backup_date.tar.gz" \
+            schema.sql data.sql auth-user-ids.txt
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$BACKUP_ENCRYPTION_PASSWORD" \
+            --symmetric --cipher-algo AES256 \
+            --output "$RUNNER_TEMP/supabase-$backup_date.tar.gz.gpg" \
+            "$RUNNER_TEMP/supabase-$backup_date.tar.gz"
+          sha256sum "$RUNNER_TEMP/supabase-$backup_date.tar.gz.gpg" \
+            > "$RUNNER_TEMP/supabase-$backup_date.tar.gz.gpg.sha256"
+          rm -rf "$RUNNER_TEMP/society-backup" "$RUNNER_TEMP/supabase-$backup_date.tar.gz"
+
+      - name: Upload encrypted verified backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/supabase-*.tar.gz.gpg
+            ${{ runner.temp }}/supabase-*.tar.gz.gpg.sha256
+          if-no-files-found: error
+          retention-days: 30
+
