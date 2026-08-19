@@ -213,7 +213,6 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
       .is("society_id", null)
       .maybeSingle();
 
-    let printSlip: PrintSlipData | undefined;
     const { data: flat } = await supabase
       .from("flats")
       .select("flat_number, owner_name, resident_name")
@@ -243,7 +242,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
         });
     }
 
-    printSlip = {
+    const printSlip: PrintSlipData = {
       type: "maintenance_receipt",
       documentNumber: maintenanceReceipt,
       date: payment.payment_date,

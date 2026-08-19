@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import type { MaintenanceSettings, Society } from "@/types/database";
@@ -67,7 +67,9 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     },
   });
 
-  const watchedFrequency = Number(maintenanceForm.watch("billing_frequency_months") || 1);
+  const watchedFrequency = Number(
+    useWatch({ control: maintenanceForm.control, name: "billing_frequency_months" }) || 1,
+  );
 
   async function saveSociety(values: SocietySettingsInput) {
     setSavingSociety(true);

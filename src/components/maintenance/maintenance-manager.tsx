@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FileSpreadsheet, FileText, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -87,9 +87,13 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
     [bills],
   );
 
-  const watchedStartMonth = Number(generateForm.watch("bill_month") || 1);
-  const watchedStartYear = Number(generateForm.watch("bill_year") || new Date().getFullYear());
-  const watchedPeriodMonths = Number(generateForm.watch("period_months") || frequencyMonths);
+  const watchedStartMonth = Number(useWatch({ control: generateForm.control, name: "bill_month" }) || 1);
+  const watchedStartYear = Number(
+    useWatch({ control: generateForm.control, name: "bill_year" }) || new Date().getFullYear(),
+  );
+  const watchedPeriodMonths = Number(
+    useWatch({ control: generateForm.control, name: "period_months" }) || frequencyMonths,
+  );
   const previewPeriod = billingPeriodLabel(watchedStartMonth, watchedStartYear, watchedPeriodMonths);
 
   const filtered = useMemo(() => {
