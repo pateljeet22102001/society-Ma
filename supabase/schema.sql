@@ -267,6 +267,7 @@ create table if not exists public.maintenance_payments (
   payment_date date not null default current_date,
   payment_mode payment_mode not null default 'cash',
   reference_number text,
+  receipt_number text,
   notes text,
   created_by uuid references public.profiles (id),
   created_at timestamptz not null default timezone('utc', now()),

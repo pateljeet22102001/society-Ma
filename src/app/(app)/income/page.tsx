@@ -43,6 +43,7 @@ export default async function IncomePage() {
       />
       <Suspense fallback={<PageSkeleton />}>
         <IncomeManager
+          society={society}
           items={items || []}
           categories={categories || []}
           flats={flats || []}

@@ -58,3 +58,32 @@ textarea {
   background: #cbd5e1;
   border-radius: 999px;
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #print-slip,
+  #print-slip * {
+    visibility: visible !important;
+  }
+
+  #print-slip {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+}

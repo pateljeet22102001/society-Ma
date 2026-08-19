@@ -34,7 +34,7 @@ export default async function ExpensesPage() {
         description="Record electricity, security, repairs, and other society expenses."
       />
       <Suspense fallback={<PageSkeleton />}>
-        <ExpenseManager items={items || []} categories={categories || []} />
+        <ExpenseManager society={society} items={items || []} categories={categories || []} />
       </Suspense>
     </div>
   );

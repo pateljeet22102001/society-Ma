@@ -6,8 +6,14 @@ import { DELETE_FINANCE_ROLES, FINANCE_ROLES, requireSocietyRole } from "@/lib/s
 import { incomeCategorySchema, incomeSchema } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
 import { financialYearWarning } from "@/lib/financial-year";
+import type { PrintSlipData } from "@/lib/print-slip";
 
-export type ActionResult = { success: boolean; message?: string; requiresConfirmation?: boolean };
+export type ActionResult = {
+  success: boolean;
+  message?: string;
+  requiresConfirmation?: boolean;
+  printSlip?: PrintSlipData;
+};
 
 function categorySlug(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -64,12 +70,29 @@ export async function createIncomeAction(input: unknown, confirmed = false): Pro
       description: parsed.data.description || null,
       receipt_number: null,
       created_by: user.id,
-    }).select("receipt_number").single();
+    }).select("*, category:income_categories(name), flat:flats(flat_number)").single();
 
     if (error) throw error;
     revalidatePath("/income");
     revalidatePath("/dashboard");
-    return { success: true, message: created?.receipt_number ? `Income added · ${created.receipt_number}` : "Income added" };
+    return {
+      success: true,
+      message: created?.receipt_number ? `Income added · ${created.receipt_number}` : "Income added",
+      printSlip: created
+        ? {
+            type: "income_receipt",
+            documentNumber: created.receipt_number || "—",
+            date: created.transaction_date,
+            amount: Number(created.amount),
+            paymentMode: created.payment_mode,
+            partyName: created.person_name,
+            flatNumber: created.flat?.flat_number || null,
+            category: created.category?.name || null,
+            description: created.description,
+            referenceNumber: created.reference_number,
+          }
+        : undefined,
+    };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to add income") };
   }

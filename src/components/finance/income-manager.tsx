@@ -4,13 +4,14 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Flat, IncomeCategory, IncomeTransaction } from "@/types/database";
+import type { Flat, IncomeCategory, IncomeTransaction, Society } from "@/types/database";
 import { incomeCategorySchema, incomeSchema, type IncomeCategoryInput, type IncomeInput } from "@/lib/validations/finance";
 import { createIncomeAction, createIncomeCategoryAction, deleteIncomeAction, updateIncomeAction } from "@/lib/actions/income";
 import { PAGE_SIZE, PAYMENT_MODES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import type { PrintSlipData } from "@/lib/print-slip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -21,14 +22,16 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { SearchInput } from "@/components/ui/search-input";
 import { Card } from "@/components/ui/card";
 import { Pagination } from "@/components/ui/pagination";
+import { PrintSlipModal } from "@/components/print/print-slip-modal";
 
 interface IncomeManagerProps {
+  society: Society | null;
   items: IncomeTransaction[];
   categories: IncomeCategory[];
   flats: Flat[];
 }
 
-export function IncomeManager({ items, categories, flats }: IncomeManagerProps) {
+export function IncomeManager({ society, items, categories, flats }: IncomeManagerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
@@ -41,6 +44,7 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
   const [loading, setLoading] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [warning, setWarning] = useState<{ values: IncomeInput; message: string } | null>(null);
+  const [printSlip, setPrintSlip] = useState<PrintSlipData | null>(null);
 
   const form = useForm<IncomeInput>({
     resolver: zodResolver(incomeSchema),
@@ -133,7 +137,23 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
     toast.success(result.message);
     setWarning(null);
     setOpen(false);
+    if (!editing && result.printSlip) setPrintSlip(result.printSlip);
     router.refresh();
+  }
+
+  function openPrint(row: IncomeTransaction) {
+    setPrintSlip({
+      type: "income_receipt",
+      documentNumber: row.receipt_number || "—",
+      date: row.transaction_date,
+      amount: Number(row.amount),
+      paymentMode: row.payment_mode,
+      partyName: row.person_name,
+      flatNumber: row.flat?.flat_number || null,
+      category: row.category?.name || null,
+      description: row.description,
+      referenceNumber: row.reference_number,
+    });
   }
 
   async function onSubmit(values: IncomeInput) {
@@ -199,6 +219,9 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
           emptyTitle="No income records"
           actions={(row) => (
             <>
+              <Button variant="outline" size="sm" onClick={() => openPrint(row)} title="Print receipt">
+                <Printer className="h-4 w-4" />
+              </Button>
               <Button variant="outline" size="sm" onClick={() => openEdit(row)}>
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -210,6 +233,13 @@ export function IncomeManager({ items, categories, flats }: IncomeManagerProps) 
         />
         <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} />
       </Card>
+
+      <PrintSlipModal
+        open={!!printSlip}
+        society={society}
+        slip={printSlip}
+        onClose={() => setPrintSlip(null)}
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Edit Income" : "Add Income"} size="lg">
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>

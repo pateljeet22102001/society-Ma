@@ -7,11 +7,17 @@ import {
   generateMaintenanceSchema,
   maintenancePaymentSchema,
 } from "@/lib/validations/finance";
-import { getErrorMessage } from "@/lib/utils";
+import { billingPeriodLabel, getErrorMessage } from "@/lib/utils";
 import type { MaintenanceStatus } from "@/types/database";
 import { financialYearWarning } from "@/lib/financial-year";
+import type { PrintSlipData } from "@/lib/print-slip";
 
-export type ActionResult = { success: boolean; message?: string; requiresConfirmation?: boolean };
+export type ActionResult = {
+  success: boolean;
+  message?: string;
+  requiresConfirmation?: boolean;
+  printSlip?: PrintSlipData;
+};
 
 function resolveStatus(total: number, paid: number, dueDate?: string | null): MaintenanceStatus {
   if (paid <= 0) {
@@ -164,19 +170,23 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
     }
     if (Number(bill.pending_amount) <= 0) return { success: false, message: "This bill has no pending balance" };
 
-    const { error: paymentError } = await supabase.from("maintenance_payments").insert({
-      society_id: society.id,
-      bill_id: bill.id,
-      flat_id: bill.flat_id,
-      amount: paymentAmount,
-      payment_date: parsed.data.payment_date,
-      payment_mode: parsed.data.payment_mode,
-      reference_number: parsed.data.reference_number || null,
-      notes: parsed.data.notes || null,
-      created_by: user.id,
-    });
+    const { data: payment, error: paymentError } = await supabase
+      .from("maintenance_payments")
+      .insert({
+        society_id: society.id,
+        bill_id: bill.id,
+        flat_id: bill.flat_id,
+        amount: paymentAmount,
+        payment_date: parsed.data.payment_date,
+        payment_mode: parsed.data.payment_mode,
+        reference_number: parsed.data.reference_number || null,
+        notes: parsed.data.notes || null,
+        created_by: user.id,
+      })
+      .select("id, receipt_number, payment_date, amount, payment_mode, reference_number")
+      .single();
 
-    if (paymentError) throw paymentError;
+    if (paymentError || !payment) throw paymentError || new Error("Failed to save payment");
 
     const paidAmount = Number(bill.paid_amount) + paymentAmount;
     const pendingAmount = Math.max(Number(bill.total_amount) - paidAmount, 0);
@@ -203,25 +213,58 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
       .is("society_id", null)
       .maybeSingle();
 
+    let printSlip: PrintSlipData | undefined;
+    const { data: flat } = await supabase
+      .from("flats")
+      .select("flat_number, owner_name, resident_name")
+      .eq("id", bill.flat_id)
+      .maybeSingle();
+
+    const partyName =
+      flat?.owner_name || flat?.resident_name || "Maintenance payment";
+    const maintenanceReceipt = payment.receipt_number || "—";
+
     if (maintenanceCategory) {
-      await supabase.from("income_transactions").insert({
-        society_id: society.id,
-        category_id: maintenanceCategory.id,
-        flat_id: bill.flat_id,
-        transaction_date: parsed.data.payment_date,
-        person_name: "Maintenance payment",
-        amount: paymentAmount,
-        payment_mode: parsed.data.payment_mode,
-        reference_number: parsed.data.reference_number || null,
-        description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
-        created_by: user.id,
-      });
+      await supabase
+        .from("income_transactions")
+        .insert({
+          society_id: society.id,
+          category_id: maintenanceCategory.id,
+          flat_id: bill.flat_id,
+          transaction_date: parsed.data.payment_date,
+          person_name: partyName,
+          amount: paymentAmount,
+          payment_mode: parsed.data.payment_mode,
+          reference_number: parsed.data.reference_number || null,
+          description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
+          // Keep MNT- series (skip income REC- trigger by providing a number)
+          receipt_number: payment.receipt_number || null,
+          created_by: user.id,
+        });
     }
+
+    printSlip = {
+      type: "maintenance_receipt",
+      documentNumber: maintenanceReceipt,
+      date: payment.payment_date,
+      amount: Number(payment.amount),
+      paymentMode: payment.payment_mode,
+      partyName,
+      flatNumber: flat?.flat_number || null,
+      category: "Maintenance",
+      description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
+      referenceNumber: payment.reference_number,
+      periodLabel: billingPeriodLabel(
+        bill.bill_month,
+        bill.bill_year,
+        Number(bill.period_months || 1),
+      ),
+    };
 
     revalidatePath("/maintenance");
     revalidatePath("/income");
     revalidatePath("/dashboard");
-    return { success: true, message: "Payment recorded" };
+    return { success: true, message: `Payment recorded · ${maintenanceReceipt}`, printSlip };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to record payment") };
   }
@@ -302,7 +345,7 @@ export async function undoLastMaintenancePaymentAction(billId: string): Promise<
       .maybeSingle();
 
     if (maintenanceCategory) {
-      const { data: matchingIncome } = await supabase
+      let matchingIncomeQuery = supabase
         .from("income_transactions")
         .select("id")
         .eq("society_id", society.id)
@@ -312,8 +355,13 @@ export async function undoLastMaintenancePaymentAction(billId: string): Promise<
         .eq("amount", payment.amount)
         .eq("description", `Maintenance ${bill.bill_month}/${bill.bill_year}`)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      if (payment.receipt_number) {
+        matchingIncomeQuery = matchingIncomeQuery.eq("receipt_number", payment.receipt_number);
+      }
+
+      const { data: matchingIncome } = await matchingIncomeQuery.maybeSingle();
 
       if (matchingIncome) {
         const { error: deleteIncomeError } = await supabase

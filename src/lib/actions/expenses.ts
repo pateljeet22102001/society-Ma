@@ -6,8 +6,14 @@ import { DELETE_FINANCE_ROLES, FINANCE_ROLES, requireSocietyRole } from "@/lib/s
 import { expenseCategorySchema, expenseSchema } from "@/lib/validations/finance";
 import { getErrorMessage } from "@/lib/utils";
 import { financialYearWarning } from "@/lib/financial-year";
+import type { PrintSlipData } from "@/lib/print-slip";
 
-export type ActionResult = { success: boolean; message?: string; requiresConfirmation?: boolean };
+export type ActionResult = {
+  success: boolean;
+  message?: string;
+  requiresConfirmation?: boolean;
+  printSlip?: PrintSlipData;
+};
 
 function categorySlug(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -58,12 +64,29 @@ export async function createExpenseAction(input: unknown, confirmed = false): Pr
       bill_number: parsed.data.bill_number || null,
       notes: parsed.data.notes || null,
       created_by: user.id,
-    }).select("voucher_number").single();
+    }).select("*, category:expense_categories(name)").single();
 
     if (error) throw error;
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
-    return { success: true, message: created?.voucher_number ? `Expense added · ${created.voucher_number}` : "Expense added" };
+    return {
+      success: true,
+      message: created?.voucher_number ? `Expense added · ${created.voucher_number}` : "Expense added",
+      printSlip: created
+        ? {
+            type: "expense_voucher",
+            documentNumber: created.voucher_number || "—",
+            date: created.transaction_date,
+            amount: Number(created.amount),
+            paymentMode: created.payment_mode,
+            partyName: created.vendor_name,
+            category: created.category?.name || null,
+            description: created.description || created.notes,
+            referenceNumber: created.reference_number,
+            billNumber: created.bill_number,
+          }
+        : undefined,
+    };
   } catch (error) {
     return { success: false, message: getErrorMessage(error, "Failed to add expense") };
   }

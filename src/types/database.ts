@@ -177,6 +177,7 @@ export interface MaintenancePayment {
   payment_date: string;
   payment_mode: PaymentMode;
   reference_number: string | null;
+  receipt_number: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;

@@ -25,6 +25,7 @@ import {
   PAYMENT_MODES,
 } from "@/lib/constants";
 import { billingPeriodLabel, cn, formatCurrency, formatDate } from "@/lib/utils";
+import type { PrintSlipData } from "@/lib/print-slip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -36,6 +37,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Pagination } from "@/components/ui/pagination";
 import { StatCard } from "@/components/ui/stat-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PrintSlipModal } from "@/components/print/print-slip-modal";
 import { AlertCircle, CheckCircle2, Clock3, IndianRupee } from "lucide-react";
 
 interface MaintenanceManagerProps {
@@ -65,6 +67,7 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
   const [undoingBill, setUndoingBill] = useState<MaintenanceBill | null>(null);
   const [paymentWarning, setPaymentWarning] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<"pdf" | "excel" | null>(null);
+  const [printSlip, setPrintSlip] = useState<PrintSlipData | null>(null);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
 
@@ -217,11 +220,17 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
     }, confirmed);
     setLoading(false);
     if (!result.success) {
+      if (result.requiresConfirmation) {
+        setPaymentWarning(result.message || "Please confirm this payment.");
+        return;
+      }
       toast.error(result.message);
       return;
     }
     toast.success(result.message);
     setPayOpen(false);
+    setPaymentWarning(null);
+    if (result.printSlip) setPrintSlip(result.printSlip);
     router.refresh();
   }
 
@@ -486,6 +495,13 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
         loading={loading}
         onConfirm={onUndoPayment}
         onClose={() => setUndoingBill(null)}
+      />
+
+      <PrintSlipModal
+        open={!!printSlip}
+        society={society}
+        slip={printSlip}
+        onClose={() => setPrintSlip(null)}
       />
     </div>
   );
