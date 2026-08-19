@@ -29,6 +29,9 @@ export const flatSchema = z.object({
 
 export const societySettingsSchema = z.object({
   name: z.string().min(1, "Society name is required"),
+  document_prefix: z.string().trim().toUpperCase()
+    .regex(/^[A-Z0-9]{1,10}$/, "Use 1-10 letters or numbers only")
+    .optional().or(z.literal("")),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),

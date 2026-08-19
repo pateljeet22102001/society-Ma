@@ -40,6 +40,7 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     resolver: zodResolver(societySettingsSchema),
     defaultValues: {
       name: society?.name || "",
+      document_prefix: society?.document_prefix || "",
       address: society?.address || "",
       city: society?.city || "",
       state: society?.state || "",
@@ -128,6 +129,13 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
           <form className="space-y-4" onSubmit={societyForm.handleSubmit(onSaveSociety)}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Input label="Society Name" error={societyForm.formState.errors.name?.message} {...societyForm.register("name")} />
+              <Input
+                label="Document Prefix"
+                placeholder="Generated from society name"
+                hint="Used for new receipts and vouchers, for example SPS-REC-2026-00001. Leave blank to generate it automatically."
+                error={societyForm.formState.errors.document_prefix?.message}
+                {...societyForm.register("document_prefix")}
+              />
               <Input label="Logo URL" hint="Upload to Supabase Storage and paste public URL" {...societyForm.register("logo_url")} />
               <Input label="Address" className="sm:col-span-2" {...societyForm.register("address")} />
               <Input label="City" {...societyForm.register("city")} />

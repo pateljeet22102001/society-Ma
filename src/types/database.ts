@@ -24,6 +24,7 @@ export interface Profile {
 export interface Society {
   id: string;
   name: string;
+  document_prefix: string;
   logo_url: string | null;
   address: string | null;
   city: string | null;

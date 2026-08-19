@@ -56,6 +56,7 @@ for each row execute function public.set_updated_at();
 create table if not exists public.societies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  document_prefix text not null default 'SOC',
   logo_url text,
   address text,
   city text,
