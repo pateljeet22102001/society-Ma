@@ -4,21 +4,27 @@ import { IncomeManager } from "@/components/finance/income-manager";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimarySociety } from "@/lib/society";
+import { PAGE_SIZE } from "@/lib/constants";
+import type { IncomeTransaction } from "@/types/database";
 
 export const metadata = { title: "Income" };
 
-export default async function IncomePage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const value = (input: string | string[] | undefined) => typeof input === "string" ? input : "";
+
+export default async function IncomePage({ searchParams }: { searchParams: SearchParams }) {
   const supabase = await createClient();
   const society = await getPrimarySociety();
+  const params = await searchParams;
+  const search = value(params.search).trim().replace(/[%_,()\"]/g, "").slice(0, 100);
+  const category = value(params.category);
+  const sort = ["date_desc", "date_asc", "amount_desc", "amount_asc"].includes(value(params.sort))
+    ? value(params.sort) : "date_desc";
+  const requestedPage = Math.max(1, Number.parseInt(value(params.page), 10) || 1);
+  const from = (requestedPage - 1) * PAGE_SIZE;
 
-  const [{ data: items }, { data: categories }, { data: flats }] = await Promise.all([
-    society
-      ? supabase
-          .from("income_transactions")
-          .select("*, category:income_categories(*), flat:flats(flat_number)")
-          .eq("society_id", society.id)
-          .order("transaction_date", { ascending: false })
-      : Promise.resolve({ data: [] }),
+  const [{ data: categories }, { data: flats }] = await Promise.all([
     supabase
       .from("income_categories")
       .select("*")
@@ -35,6 +41,30 @@ export default async function IncomePage() {
       : Promise.resolve({ data: [] }),
   ]);
 
+  let items: IncomeTransaction[] = [];
+  let total = 0;
+  const selectedCategory = (categories || []).some((item) => item.id === category) ? category : "";
+  if (society) {
+    let query = supabase
+      .from("income_transactions")
+      .select("*, category:income_categories(*), flat:flats(flat_number)", { count: "exact" })
+      .eq("society_id", society.id);
+    if (selectedCategory) query = query.eq("category_id", selectedCategory);
+    if (search) {
+      const matchingCategories = (categories || []).filter((item) => item.name.toLowerCase().includes(search.toLowerCase())).map((item) => item.id);
+      const conditions = ["person_name", "receipt_number", "reference_number", "description"].map((field) => `${field}.ilike.%${search}%`);
+      if (matchingCategories.length) conditions.push(`category_id.in.(${matchingCategories.join(",")})`);
+      query = query.or(conditions.join(","));
+    }
+    const sortColumn = sort.startsWith("amount") ? "amount" : "transaction_date";
+    const ascending = sort.endsWith("asc");
+    const result = await query.order(sortColumn, { ascending }).range(from, from + PAGE_SIZE - 1);
+    items = result.data || [];
+    total = result.count || 0;
+  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
@@ -47,6 +77,11 @@ export default async function IncomePage() {
           items={items || []}
           categories={categories || []}
           flats={flats || []}
+          total={total}
+          page={page}
+          initialSearch={search}
+          categoryFilter={selectedCategory}
+          sort={sort as "date_desc" | "date_asc" | "amount_desc" | "amount_asc"}
         />
       </Suspense>
     </div>

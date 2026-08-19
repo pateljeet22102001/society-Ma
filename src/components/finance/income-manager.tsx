@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Pencil, Plus, Printer, Trash2 } from "lucide-react";
@@ -29,15 +29,18 @@ interface IncomeManagerProps {
   items: IncomeTransaction[];
   categories: IncomeCategory[];
   flats: Flat[];
+  total: number;
+  page: number;
+  initialSearch: string;
+  categoryFilter: string;
+  sort: "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
 }
 
-export function IncomeManager({ society, items, categories, flats }: IncomeManagerProps) {
+export function IncomeManager({ society, items, categories, flats, total, page, initialSearch, categoryFilter, sort }: IncomeManagerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [sort, setSort] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc">("date_desc");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(initialSearch);
   const [open, setOpen] = useState(searchParams.get("new") === "1");
   const [editing, setEditing] = useState<IncomeTransaction | null>(null);
   const [deleting, setDeleting] = useState<IncomeTransaction | null>(null);
@@ -63,30 +66,20 @@ export function IncomeManager({ society, items, categories, flats }: IncomeManag
     toast.success(result.message); categoryForm.reset(); setCategoryOpen(false); router.refresh();
   }
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let rows = items.filter((item) => {
-      const matchesCategory = !categoryFilter || item.category_id === categoryFilter;
-      const matchesSearch =
-        !q ||
-        item.person_name?.toLowerCase().includes(q) ||
-        item.receipt_number?.toLowerCase().includes(q) ||
-        item.description?.toLowerCase().includes(q) ||
-        item.category?.name?.toLowerCase().includes(q);
-      return matchesCategory && matchesSearch;
+  const updateQuery = useCallback((changes: Record<string, string | number>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(changes).forEach(([key, next]) => {
+      if (next === "" || next === 1) params.delete(key); else params.set(key, String(next));
     });
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
-    rows = [...rows].sort((a, b) => {
-      if (sort === "amount_desc") return Number(b.amount) - Number(a.amount);
-      if (sort === "amount_asc") return Number(a.amount) - Number(b.amount);
-      if (sort === "date_asc") return a.transaction_date.localeCompare(b.transaction_date);
-      return b.transaction_date.localeCompare(a.transaction_date);
-    });
-
-    return rows;
-  }, [items, search, categoryFilter, sort]);
-
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    if (search === (searchParams.get("search") || "")) return;
+    const timer = window.setTimeout(() => updateQuery({ search: search.trim(), page: 1 }), 350);
+    return () => window.clearTimeout(timer);
+  }, [search, searchParams, updateQuery]);
 
   function openCreate() {
     setEditing(null);
@@ -194,11 +187,11 @@ export function IncomeManager({ society, items, categories, flats }: IncomeManag
     <>
       <Card>
         <div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-4 sm:p-5">
-          <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search income..." />
+          <SearchInput value={search} onChange={setSearch} placeholder="Search income..." />
           <Select
             options={[{ value: "", label: "All Categories" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
             value={categoryFilter}
-            onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+            onChange={(e) => updateQuery({ category: e.target.value, page: 1 })}
           />
           <Select
             options={[
@@ -208,13 +201,13 @@ export function IncomeManager({ society, items, categories, flats }: IncomeManag
               { value: "amount_asc", label: "Amount low-high" },
             ]}
             value={sort}
-            onChange={(e) => setSort(e.target.value as typeof sort)}
+            onChange={(e) => updateQuery({ sort: e.target.value, page: 1 })}
           />
           <div className="flex gap-2"><Button variant="outline" onClick={() => setCategoryOpen(true)}><Plus className="h-4 w-4" />Category</Button><Button onClick={openCreate} disabled={!categories.length}><Plus className="h-4 w-4" />Add Income</Button></div>
         </div>
         <DataTable
           columns={columns}
-          data={paged}
+          data={items}
           keyExtractor={(row) => row.id}
           emptyTitle="No income records"
           actions={(row) => (
@@ -231,7 +224,7 @@ export function IncomeManager({ society, items, categories, flats }: IncomeManag
             </>
           )}
         />
-        <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={(nextPage) => updateQuery({ page: nextPage })} />
       </Card>
 
       <PrintSlipModal
