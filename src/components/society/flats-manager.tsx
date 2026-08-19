@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { History, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import type { Flat, Wing } from "@/types/database";
 import { flatSchema, type FlatInput } from "@/lib/validations/society";
 import {
@@ -191,6 +192,13 @@ export function FlatsManager({ flats, wings }: FlatsManagerProps) {
           emptyDescription={wings.length ? "Add a flat or create a wing with auto flats." : "Create a wing first."}
           actions={(row) => (
             <>
+              <Link
+                href={`/society/flats/${row.id}`}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
+                title="Past records"
+              >
+                <History className="h-4 w-4" />
+              </Link>
               <Button variant="outline" size="sm" onClick={() => openEdit(row)}>
                 <Pencil className="h-4 w-4" />
               </Button>

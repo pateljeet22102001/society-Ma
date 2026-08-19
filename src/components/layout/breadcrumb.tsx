@@ -17,6 +17,8 @@ const labels: Record<string, string> = {
   settings: "Settings",
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function Breadcrumb() {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
@@ -28,7 +30,7 @@ export function Breadcrumb() {
       {parts.map((part, index) => {
         const href = "/" + parts.slice(0, index + 1).join("/");
         const isLast = index === parts.length - 1;
-        const label = labels[part] || part;
+        const label = UUID_RE.test(part) ? "History" : labels[part] || part;
 
         return (
           <div key={href} className="flex min-w-0 items-center gap-1">

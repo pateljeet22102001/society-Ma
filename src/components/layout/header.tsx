@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getErrorMessage } from "@/lib/utils";
 import { Breadcrumb } from "./breadcrumb";
+import { GlobalSearch } from "./global-search";
 
 interface HeaderProps {
   userEmail?: string | null;
@@ -48,8 +49,8 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur">
-      <div className="flex h-16 items-center justify-between gap-3 px-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-5">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -72,12 +73,16 @@ export function Header({
               <PanelLeftClose className="h-5 w-5" />
             )}
           </Button>
-          <div className="min-w-0">
+          <div className="hidden min-w-0 max-w-[180px] lg:block xl:max-w-xs">
             <Breadcrumb />
           </div>
         </div>
 
-        <div className="relative">
+        <div className="min-w-0 flex-1">
+          <GlobalSearch />
+        </div>
+
+        <div className="relative shrink-0">
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}

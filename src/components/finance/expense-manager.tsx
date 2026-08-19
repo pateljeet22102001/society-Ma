@@ -38,7 +38,7 @@ interface ExpenseManagerProps {
 export function ExpenseManager({ society, items, categories }: ExpenseManagerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sort, setSort] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc">("date_desc");
   const [page, setPage] = useState(1);
