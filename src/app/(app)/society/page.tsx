@@ -23,7 +23,7 @@ export default async function SocietyPage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Society Setup"
         description="Manage society structure: wings and flats."

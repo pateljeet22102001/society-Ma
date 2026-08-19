@@ -33,7 +33,7 @@ export function AppShell({ children, userEmail, userName, societyName }: AppShel
           onToggleCollapse={() => setCollapsed((v) => !v)}
           onOpenMobile={() => setMobileOpen(true)}
         />
-        <main className="flex-1 overflow-x-hidden px-3 py-4 sm:px-5 sm:py-6 lg:px-8">
+        <main className="flex-1 overflow-x-hidden px-3 py-3 pb-6 sm:px-5 sm:py-5 lg:px-8 lg:py-6">
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>

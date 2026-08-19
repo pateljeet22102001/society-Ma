@@ -39,9 +39,9 @@ export function DataTable<T>({
         {data.map((row) => (
           <div
             key={keyExtractor(row)}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
           >
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {columns.filter((column) => !column.hideOnMobile).map((column) => (
                 <div key={column.key} className="flex min-w-0 items-start justify-between gap-3">
                   <span className="max-w-[42%] shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">

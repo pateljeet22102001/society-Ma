@@ -24,10 +24,10 @@ export function CardHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <div className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-4">
       <div className="min-w-0">
-        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-        {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+        <h3 className="text-sm font-semibold text-slate-900 sm:text-base">{title}</h3>
+        {description ? <p className="mt-0.5 text-xs text-slate-500 sm:mt-1 sm:text-sm">{description}</p> : null}
       </div>
       {action ? <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">{action}</div> : null}
     </div>
@@ -41,5 +41,5 @@ export function CardContent({
   className?: string;
   children: React.ReactNode;
 }) {
-  return <div className={cn("p-4 sm:p-5", className)}>{children}</div>;
+  return <div className={cn("p-3 sm:p-5", className)}>{children}</div>;
 }

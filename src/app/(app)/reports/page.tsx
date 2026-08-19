@@ -19,7 +19,7 @@ export default async function ReportsPage() {
     supabase.from("event_expenses").select("*").eq("society_id", society.id).order("expense_date", { ascending: false }),
   ]) : Array.from({ length: 9 }, () => ({ data: [] }));
 
-  return <div className="space-y-6">
+  return <div className="space-y-4 sm:space-y-6">
     <ReportsManager society={society} income={income.data || []} expenses={expenses.data || []} maintenance={maintenance.data || []} maintenancePayments={maintenancePayments.data || []} events={events.data || []} eventFlatContributions={eventFlatContributions.data || []} eventFlatPayments={eventFlatPayments.data || []} eventAavak={eventAavak.data || []} eventExpenses={eventExpenses.data || []} />
   </div>;
 }

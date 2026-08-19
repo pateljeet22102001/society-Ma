@@ -43,7 +43,7 @@ export default async function MaintenancePage() {
       ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Maintenance"
         description="Generate flexible 1-12 month flat-wise bills, collect payments, and track dues."

@@ -27,7 +27,7 @@ export default async function FlatsPage() {
     : [{ data: [] }, { data: [] }];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Flat Management"
         description="Manage owners, residents, occupancy, and flat status."

@@ -23,7 +23,7 @@ export function IncomeExpenseChart({
   data: { month: string; income: number; expense: number }[];
 }) {
   return (
-    <div className="h-72 w-full min-w-0">
+    <div className="h-52 w-full min-w-0 sm:h-72">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -59,14 +59,14 @@ export function MaintenanceChart({
 
   if (!chartData.length) {
     return (
-      <div className="flex h-72 items-center justify-center text-sm text-slate-500">
+      <div className="flex h-52 items-center justify-center text-sm text-slate-500 sm:h-72">
         No maintenance data yet
       </div>
     );
   }
 
   return (
-    <div className="h-72 w-full min-w-0">
+    <div className="h-52 w-full min-w-0 sm:h-72">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

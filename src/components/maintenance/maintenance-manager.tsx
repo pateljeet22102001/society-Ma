@@ -275,8 +275,8 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <StatCard title="Total Expected" value={formatCurrency(summary.totalExpected)} icon={IndianRupee} />
         <StatCard title="Total Collected" value={formatCurrency(summary.totalCollected)} icon={CheckCircle2} tone="green" />
         <StatCard title="Total Pending" value={formatCurrency(summary.totalPending)} icon={Clock3} tone="amber" />

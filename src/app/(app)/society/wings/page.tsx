@@ -20,7 +20,7 @@ export default async function WingsPage() {
     : { data: [] };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Wing Management"
         description="Create wings and auto-generate flats like A-01 to A-20."

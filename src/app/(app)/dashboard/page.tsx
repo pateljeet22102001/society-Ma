@@ -27,7 +27,7 @@ export default async function DashboardPage() {
   const { stats } = data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Dashboard"
         description={
@@ -44,7 +44,7 @@ export default async function DashboardPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <StatCard
           title="Total Income"
           value={formatCurrency(stats.totalIncome)}
@@ -92,7 +92,7 @@ export default async function DashboardPage() {
         <QuickActions />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2 xl:gap-4">
         <Card>
           <CardHeader title="Monthly Income vs Expense" description="Last 6 months" />
           <CardContent>
@@ -107,7 +107,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-3 xl:grid-cols-3 xl:gap-4">
         <Card>
           <CardHeader
             title="Recent Income"

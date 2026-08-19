@@ -48,14 +48,14 @@ export function EventManager({ events, flatContributions, aavak, expenses }: Pro
   async function run(action: Promise<{success:boolean;message?:string;requiresConfirmation?:boolean}>, close = true, retry?: () => Promise<{success:boolean;message?:string;requiresConfirmation?:boolean}>) { setLoading(true); const r = await action; setLoading(false); if (r.requiresConfirmation && retry) { setWarning({ message: r.message || "Please confirm this entry.", retry }); return; } if (r.success) toast.success(r.message); else toast.error(r.message); if (r.success) { setWarning(null); setDestructive(null); if (close) setModal(null); router.refresh(); } }
   function formData(form: HTMLFormElement) { return Object.fromEntries(new FormData(form)); }
 
-  return <div className="space-y-5">
+  return <div className="space-y-4">
     <Card><CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <Select className="flex-1" label="Event" placeholder="Create an event first" value={eventId} onChange={(e) => setEventId(e.target.value)} options={events.map((e) => ({ value: e.id, label: `${e.name} ${e.event_year}` }))} />
       <Button className="w-full sm:w-auto" onClick={() => setModal("event")}><Plus className="h-4 w-4" />Create Event</Button>
     </CardContent></Card>
 
     {event ? <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <StatCard title="Expected Flat Contribution" value={formatCurrency(summary.expected)} icon={IndianRupee} />
         <StatCard title="Flat Contribution Collected" value={formatCurrency(summary.flatPaid)} icon={CheckCircle2} tone="green" />
         <StatCard title="Pending From Flats" value={formatCurrency(summary.pending)} icon={Wallet} tone="amber" />

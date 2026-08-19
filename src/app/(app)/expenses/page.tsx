@@ -28,7 +28,7 @@ export default async function ExpensesPage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Expense / Javak"
         description="Record electricity, security, repairs, and other society expenses."

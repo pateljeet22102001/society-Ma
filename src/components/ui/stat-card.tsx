@@ -20,11 +20,11 @@ const tones = {
 
 export function StatCard({ title, value, icon: Icon, tone = "blue", hint, href }: StatCardProps) {
   const content = (
-    <div className={cn("rounded-2xl border border-slate-200/80 bg-white p-4 shadow-soft sm:p-5", href && "h-full cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-within:border-primary/40")}>
+    <div className={cn("rounded-2xl border border-slate-200/80 bg-white p-3 shadow-soft sm:p-5", href && "h-full cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-within:border-primary/40")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="mt-2 truncate text-2xl font-semibold tracking-tight text-slate-900">
+          <p className="text-xs text-slate-500 sm:text-sm">{title}</p>
+          <p className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-900 sm:mt-2 sm:text-2xl">
             {value}
           </p>
           {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}

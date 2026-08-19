@@ -14,7 +14,7 @@ export default async function EventsPage() {
     supabase.from("event_expenses").select("*").eq("society_id", society.id).order("expense_date", { ascending: false }),
   ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
-  return <div className="space-y-6">
+  return <div className="space-y-4 sm:space-y-6">
     <PageHeader title="Event Hisab" description="Manage flat contributions, money and item Aavak, expenses, and event balance." />
     <EventManager events={events.data || []} flatContributions={flatContributions.data || []} aavak={aavak.data || []} expenses={expenses.data || []} />
   </div>;
