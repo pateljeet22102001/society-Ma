@@ -63,6 +63,7 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
     defaultValues: {
       billing_frequency_months: frequency,
       default_amount: Number(maintenance?.default_amount || 1500),
+      use_due_date: maintenance?.use_due_date ?? true,
       due_day: Number(maintenance?.due_day || 10),
       late_fee: Number(maintenance?.late_fee || 100),
     },
@@ -71,6 +72,7 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
   const watchedFrequency = Number(
     useWatch({ control: maintenanceForm.control, name: "billing_frequency_months" }) || 1,
   );
+  const useDueDate = useWatch({ control: maintenanceForm.control, name: "use_due_date" });
 
   async function saveSociety(values: SocietySettingsInput) {
     setSavingSociety(true);
@@ -173,14 +175,31 @@ export function SettingsForms({ society, maintenance }: SettingsFormsProps) {
               Selected: <span className="font-medium text-slate-700">{billingFrequencyLabel(watchedFrequency)}</span>.
               The amount below is the default total for one full billing period, not a monthly rate.
             </p>
+            <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary-600"
+                {...maintenanceForm.register("use_due_date")}
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">Use maintenance due dates</span>
+                <span className="block text-xs text-slate-500">
+                  Turn this off if unpaid bills should stay Pending without a due date or late fee.
+                </span>
+              </span>
+            </label>
             <div className="grid gap-4 sm:grid-cols-3">
               <Input
                 label={`Default total (${watchedFrequency} ${watchedFrequency === 1 ? "month" : "months"})`}
                 type="number"
                 {...maintenanceForm.register("default_amount")}
               />
-              <Input label="Due Day (1-28)" type="number" {...maintenanceForm.register("due_day")} />
-              <Input label="Late Fee" type="number" {...maintenanceForm.register("late_fee")} />
+              {useDueDate ? (
+                <>
+                  <Input label="Due Day (1-28)" type="number" {...maintenanceForm.register("due_day")} />
+                  <Input label="Late Fee" type="number" {...maintenanceForm.register("late_fee")} />
+                </>
+              ) : null}
             </div>
             <div className="flex justify-end">
               <Button type="submit" loading={savingMaintenance}>Save Maintenance Settings</Button>

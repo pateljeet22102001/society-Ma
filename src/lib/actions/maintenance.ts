@@ -45,7 +45,8 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
       .maybeSingle();
 
     const amount = parsed.data.amount;
-    const lateFeeDefault = parsed.data.late_fee ?? settings?.late_fee ?? 0;
+    const useDueDate = settings?.use_due_date ?? true;
+    const lateFeeDefault = useDueDate ? (parsed.data.late_fee ?? settings?.late_fee ?? 0) : 0;
     const dueDay = settings?.due_day ?? 10;
     const periodMonths = parsed.data.period_months;
 
@@ -62,15 +63,15 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
 
     const { data: existingBills, error: existingError } = await supabase
       .from("maintenance_bills")
-      .select("flat_id,bill_month,bill_year,period_months")
+      .select("flat_id,bill_month,bill_year,period_months,pending_amount")
       .eq("society_id", society.id);
     if (existingError) throw existingError;
     const requestedStart = parsed.data.bill_year * 12 + parsed.data.bill_month - 1;
     const requestedEnd = requestedStart + periodMonths - 1;
 
-    const dueDate = new Date(parsed.data.bill_year, parsed.data.bill_month - 1, dueDay)
-      .toISOString()
-      .slice(0, 10);
+    const dueDate = useDueDate
+      ? new Date(parsed.data.bill_year, parsed.data.bill_month - 1, dueDay).toISOString().slice(0, 10)
+      : null;
 
     const bills = [];
     let skippedOverlaps = 0;
@@ -86,18 +87,17 @@ export async function generateMaintenanceBillsAction(input: unknown): Promise<Ac
         skippedOverlaps += 1;
         continue;
       }
-      const { data: previous } = await supabase
-        .from("maintenance_bills")
-        .select("pending_amount")
-        .eq("flat_id", flat.id)
-        .eq("society_id", society.id)
-        .order("bill_year", { ascending: false })
-        .order("bill_month", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const previousOutstanding = Number(previous?.pending_amount || 0);
-      const total = amount + previousOutstanding + Number(lateFeeDefault);
+      const previousOutstanding = (existingBills || [])
+        .filter((existing) => {
+          if (existing.flat_id !== flat.id) return false;
+          const existingStart = Number(existing.bill_year) * 12 + Number(existing.bill_month) - 1;
+          const existingEnd = existingStart + Number(existing.period_months || 1) - 1;
+          return existingEnd < requestedStart;
+        })
+        .reduce((sum, existing) => sum + Number(existing.pending_amount || 0), 0);
+      // This is informational carry-forward only. The original unpaid bill is
+      // still in the ledger, so adding it here would count the same debt twice.
+      const total = amount + Number(lateFeeDefault);
 
       bills.push({
         society_id: society.id,
@@ -151,7 +151,7 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
 
   try {
     const supabase = await createClient();
-    const { society, user } = await requireSocietyRole(FINANCE_ROLES);
+    const { society } = await requireSocietyRole(FINANCE_ROLES);
     const dateWarning = financialYearWarning(parsed.data.payment_date);
     if (dateWarning && !confirmed) return { success: false, requiresConfirmation: true, message: dateWarning };
 
@@ -170,89 +170,44 @@ export async function addMaintenancePaymentAction(input: unknown, confirmed = fa
     }
     if (Number(bill.pending_amount) <= 0) return { success: false, message: "This bill has no pending balance" };
 
-    const { data: payment, error: paymentError } = await supabase
-      .from("maintenance_payments")
-      .insert({
-        society_id: society.id,
-        bill_id: bill.id,
-        flat_id: bill.flat_id,
-        amount: paymentAmount,
-        payment_date: parsed.data.payment_date,
-        payment_mode: parsed.data.payment_mode,
-        reference_number: parsed.data.reference_number || null,
-        notes: parsed.data.notes || null,
-        created_by: user.id,
-      })
-      .select("id, receipt_number, payment_date, amount, payment_mode, reference_number")
-      .single();
+    const { data: payment, error: paymentError } = await supabase.rpc(
+      "record_maintenance_payment",
+      {
+        p_society_id: society.id,
+        p_bill_id: bill.id,
+        p_amount: paymentAmount,
+        p_payment_date: parsed.data.payment_date,
+        p_payment_mode: parsed.data.payment_mode,
+        p_reference_number: parsed.data.reference_number || null,
+        p_notes: parsed.data.notes || null,
+      },
+    );
 
     if (paymentError || !payment) throw paymentError || new Error("Failed to save payment");
 
-    const paidAmount = Number(bill.paid_amount) + paymentAmount;
-    const pendingAmount = Math.max(Number(bill.total_amount) - paidAmount, 0);
-    const status = resolveStatus(Number(bill.total_amount), paidAmount, bill.due_date);
-
-    const { error: updateError } = await supabase
-      .from("maintenance_bills")
-      .update({
-        paid_amount: paidAmount,
-        pending_amount: pendingAmount,
-        payment_date: parsed.data.payment_date,
-        status,
-      })
-      .eq("id", bill.id)
-      .eq("society_id", society.id);
-
-    if (updateError) throw updateError;
-
-    // Mirror maintenance collection into income for balance accuracy
-    const { data: maintenanceCategory } = await supabase
-      .from("income_categories")
-      .select("id")
-      .eq("slug", "maintenance")
-      .is("society_id", null)
-      .maybeSingle();
-
-    const { data: flat } = await supabase
-      .from("flats")
-      .select("flat_number, owner_name, resident_name")
-      .eq("id", bill.flat_id)
-      .maybeSingle();
-
-    const partyName =
-      flat?.owner_name || flat?.resident_name || "Maintenance payment";
-    const maintenanceReceipt = payment.receipt_number || "—";
-
-    if (maintenanceCategory) {
-      await supabase
-        .from("income_transactions")
-        .insert({
-          society_id: society.id,
-          category_id: maintenanceCategory.id,
-          flat_id: bill.flat_id,
-          transaction_date: parsed.data.payment_date,
-          person_name: partyName,
-          amount: paymentAmount,
-          payment_mode: parsed.data.payment_mode,
-          reference_number: parsed.data.reference_number || null,
-          description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
-          // Keep MNT- series (skip income REC- trigger by providing a number)
-          receipt_number: payment.receipt_number || null,
-          created_by: user.id,
-        });
-    }
+    const paymentResult = payment as {
+      receipt_number: string | null;
+      payment_date: string;
+      amount: number;
+      payment_mode: string;
+      reference_number: string | null;
+      flat_number: string | null;
+      party_name: string;
+    };
+    const partyName = paymentResult.party_name;
+    const maintenanceReceipt = paymentResult.receipt_number || "—";
 
     const printSlip: PrintSlipData = {
       type: "maintenance_receipt",
       documentNumber: maintenanceReceipt,
-      date: payment.payment_date,
-      amount: Number(payment.amount),
-      paymentMode: payment.payment_mode,
+      date: paymentResult.payment_date,
+      amount: Number(paymentResult.amount),
+      paymentMode: paymentResult.payment_mode,
       partyName,
-      flatNumber: flat?.flat_number || null,
+      flatNumber: paymentResult.flat_number,
       category: "Maintenance",
       description: `Maintenance ${bill.bill_month}/${bill.bill_year}`,
-      referenceNumber: payment.reference_number,
+      referenceNumber: paymentResult.reference_number,
       periodLabel: billingPeriodLabel(
         bill.bill_month,
         bill.bill_year,

@@ -215,6 +215,7 @@ create table if not exists public.maintenance_settings (
   id uuid primary key default gen_random_uuid(),
   society_id uuid not null unique references public.societies (id) on delete cascade,
   default_amount numeric(12, 2) not null default 1500 check (default_amount >= 0),
+  use_due_date boolean not null default true,
   due_day integer not null default 10 check (due_day between 1 and 28),
   late_fee numeric(12, 2) not null default 0 check (late_fee >= 0),
   billing_frequency_months integer not null default 1 check (billing_frequency_months between 1 and 12),

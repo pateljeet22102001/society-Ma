@@ -70,6 +70,7 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
   const [printSlip, setPrintSlip] = useState<PrintSlipData | null>(null);
 
   const frequencyMonths = Number(settings?.billing_frequency_months || 1);
+  const useDueDate = settings?.use_due_date ?? true;
 
   const generateForm = useForm<GenerateMaintenanceInput>({
     resolver: zodResolver(generateMaintenanceSchema),
@@ -393,7 +394,13 @@ export function MaintenanceManager({ society, bills, flats, wings, settings }: M
               type="number"
               {...generateForm.register("amount")}
             />
-            <Input label="Late Fee" type="number" {...generateForm.register("late_fee")} />
+            {useDueDate ? (
+              <Input label="Late Fee" type="number" {...generateForm.register("late_fee")} />
+            ) : (
+              <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:self-end">
+                No due date or late fee
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-500">
             Default from Settings: {billingFrequencyLabel(frequencyMonths)}. Changing this bill does not change old bills.

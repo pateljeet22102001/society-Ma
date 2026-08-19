@@ -53,6 +53,7 @@ export const maintenanceSettingsSchema = z.object({
     .min(1, "Minimum period is 1 month")
     .max(12, "Maximum period is 12 months"),
   default_amount: z.coerce.number().min(0, "Amount cannot be negative"),
+  use_due_date: z.boolean(),
   due_day: z.coerce.number().int().min(1).max(28),
   late_fee: z.coerce.number().min(0, "Late fee cannot be negative"),
 });

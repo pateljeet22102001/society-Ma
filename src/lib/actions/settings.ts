@@ -50,6 +50,7 @@ export async function saveSocietySettingsAction(input: unknown): Promise<ActionR
       await supabase.from("maintenance_settings").insert({
         society_id: society.id,
         default_amount: 1500,
+        use_due_date: true,
         due_day: 10,
         late_fee: 100,
         billing_frequency_months: 1,

@@ -138,6 +138,7 @@ export interface MaintenanceSettings {
   id: string;
   society_id: string;
   default_amount: number;
+  use_due_date: boolean;
   due_day: number;
   late_fee: number;
   billing_frequency_months: BillingFrequencyMonths;
