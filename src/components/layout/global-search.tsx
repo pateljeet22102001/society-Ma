@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Loader2, Receipt, Search, TrendingDown, Wallet, X } from "lucide-react";
+import { Building2, CalendarHeart, Loader2, Receipt, Search, TrendingDown, Wallet, X } from "lucide-react";
 import { searchGlobalAction, type GlobalSearchHit, type GlobalSearchHitType } from "@/lib/actions/search";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ const TYPE_META: Record<
   income: { label: "Income", icon: Receipt, className: "bg-emerald-50 text-emerald-700" },
   expense: { label: "Expense", icon: TrendingDown, className: "bg-rose-50 text-rose-700" },
   maintenance: { label: "Maintenance", icon: Wallet, className: "bg-amber-50 text-amber-700" },
+  event: { label: "Event Hisab", icon: CalendarHeart, className: "bg-violet-50 text-violet-700" },
 };
 
 export function GlobalSearch() {
@@ -92,7 +93,7 @@ export function GlobalSearch() {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search flats, owners, receipts…"
+          placeholder="Search flats, owners, receipts, events…"
           className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-16 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
           aria-label="Global search"
         />
@@ -166,7 +167,7 @@ export function GlobalSearch() {
                         <span className="mt-0.5 block truncate text-xs text-slate-500">{hit.subtitle}</span>
                         <span className="mt-1 inline-flex text-[10px] font-medium uppercase tracking-wide text-slate-400">
                           {meta.label}
-                          {hit.type === "flat" ? " · Past records" : ""}
+                          {hit.type === "flat" ? " • Past records" : ""}
                         </span>
                       </span>
                     </button>

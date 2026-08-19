@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarHeart, CheckCircle2, Gift, IndianRupee, Plus, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import type { EventContribution, EventExpense, EventFlatContribution, SocietyEvent } from "@/types/database";
@@ -25,7 +25,9 @@ const expenseCategories = ["Sound system", "Nasta / food", "Decoration", "Lighti
 
 export function EventManager({ events, flatContributions, aavak, expenses }: Props) {
   const router = useRouter();
-  const [eventId, setEventId] = useState(events[0]?.id || "");
+  const searchParams = useSearchParams();
+  const requestedEvent = searchParams.get("event");
+  const [eventId, setEventId] = useState(events.some((item) => item.id === requestedEvent) ? requestedEvent || "" : events[0]?.id || "");
   const event = events.find((e) => e.id === eventId);
   const [modal, setModal] = useState<"event" | "pay" | "aavak" | "expense" | null>(null);
   const [selected, setSelected] = useState<EventFlatContribution | null>(null);

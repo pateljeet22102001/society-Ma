@@ -51,7 +51,7 @@ interface MaintenanceManagerProps {
 export function MaintenanceManager({ society, bills, flats, wings, settings }: MaintenanceManagerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("filter") || "");
   const [wingFilter, setWingFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
