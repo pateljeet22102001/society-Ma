@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { Society } from "@/types/database";
 import {
@@ -19,7 +20,7 @@ interface PrintSlipModalProps {
 }
 
 export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalProps) {
-  if (!open || !slip) return null;
+  if (!open || !slip || typeof document === "undefined") return null;
 
   const isExpense = slip.type === "expense_voucher";
 
@@ -27,7 +28,7 @@ export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalP
     window.print();
   }
 
-  return (
+  return createPortal(
     <div className="print-slip-root fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4">
       <button
         type="button"
@@ -153,6 +154,7 @@ export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalP
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

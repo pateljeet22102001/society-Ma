@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPrimarySociety } from "@/lib/society";
 import { PAGE_SIZE } from "@/lib/constants";
 import type { IncomeTransaction } from "@/types/database";
+import { billingPeriodLabel } from "@/lib/utils";
 
 export const metadata = { title: "Income" };
 
@@ -61,6 +62,41 @@ export default async function IncomePage({ searchParams }: { searchParams: Searc
     const result = await query.order(sortColumn, { ascending }).range(from, from + PAGE_SIZE - 1);
     items = result.data || [];
     total = result.count || 0;
+
+    const maintenanceReceiptNumbers = items
+      .filter((item) => item.category?.slug === "maintenance" && item.receipt_number)
+      .map((item) => item.receipt_number as string);
+
+    if (maintenanceReceiptNumbers.length) {
+      const { data: payments } = await supabase
+        .from("maintenance_payments")
+        .select("receipt_number, bill:maintenance_bills(bill_month,bill_year,period_months)")
+        .eq("society_id", society.id)
+        .in("receipt_number", maintenanceReceiptNumbers);
+
+      const periodByReceipt = new Map(
+        (payments || []).map((payment) => {
+          const relation = payment.bill as unknown as
+            | { bill_month: number; bill_year: number; period_months: number }
+            | { bill_month: number; bill_year: number; period_months: number }[]
+            | null;
+          const bill = Array.isArray(relation) ? relation[0] : relation;
+          return [
+            payment.receipt_number,
+            bill
+              ? billingPeriodLabel(bill.bill_month, bill.bill_year, Number(bill.period_months || 1))
+              : null,
+          ] as const;
+        }),
+      );
+
+      items = items.map((item) => ({
+        ...item,
+        maintenance_period_label: item.receipt_number
+          ? periodByReceipt.get(item.receipt_number) || null
+          : null,
+      }));
+    }
   }
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);

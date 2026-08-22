@@ -69,13 +69,8 @@ textarea {
     padding: 0 !important;
   }
 
-  body * {
-    visibility: hidden !important;
-  }
-
-  .print-slip-root,
-  .print-slip-root * {
-    visibility: visible !important;
+  body > *:not(.print-slip-root) {
+    display: none !important;
   }
 
   .print-slip-root {

@@ -146,6 +146,7 @@ export function IncomeManager({ society, items, categories, flats, total, page, 
       category: row.category?.name || null,
       description: row.description,
       referenceNumber: row.reference_number,
+      periodLabel: row.maintenance_period_label,
     });
   }
 

@@ -110,6 +110,7 @@ export interface IncomeTransaction {
   updated_at: string;
   category?: IncomeCategory | null;
   flat?: Flat | null;
+  maintenance_period_label?: string | null;
 }
 
 export interface ExpenseTransaction {
