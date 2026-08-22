@@ -28,7 +28,7 @@ export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalP
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4 print:static print:bg-transparent print:p-0">
+    <div className="print-slip-root fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close receipt"
@@ -36,7 +36,7 @@ export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalP
         onClick={onClose}
       />
 
-      <div className="relative z-10 flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl print:max-h-none print:max-w-none print:rounded-none print:shadow-none">
+      <div className="print-slip-dialog relative z-10 flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 print:hidden sm:px-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{slipTitle(slip.type)}</h2>
@@ -47,7 +47,7 @@ export function PrintSlipModal({ open, society, slip, onClose }: PrintSlipModalP
           </Button>
         </div>
 
-        <div className="overflow-y-auto px-4 py-4 sm:px-5">
+        <div className="print-slip-content overflow-y-auto px-4 py-4 sm:px-5">
           <div id="print-slip" className="rounded-xl border border-slate-200 bg-white p-5 text-slate-900 sm:p-6 print:border-0 print:p-0">
             <div className="border-b border-slate-200 pb-4 text-center">
               <p className="text-xl font-bold tracking-tight">{society?.name || "Society Management"}</p>
