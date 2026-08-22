@@ -7,7 +7,7 @@ import { getPrimarySociety } from "@/lib/society";
 
 export const metadata = { title: "Maintenance" };
 
-export default async function MaintenancePage() {
+async function MaintenanceContent() {
   const supabase = await createClient();
   const society = await getPrimarySociety();
 
@@ -43,19 +43,25 @@ export default async function MaintenancePage() {
       ];
 
   return (
+    <MaintenanceManager
+      society={society}
+      bills={bills || []}
+      flats={flats || []}
+      wings={wings || []}
+      settings={settings}
+    />
+  );
+}
+
+export default function MaintenancePage() {
+  return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Maintenance"
         description="Generate flexible 1-12 month flat-wise bills, collect payments, and track dues."
       />
       <Suspense fallback={<PageSkeleton />}>
-        <MaintenanceManager
-          society={society}
-          bills={bills || []}
-          flats={flats || []}
-          wings={wings || []}
-          settings={settings}
-        />
+        <MaintenanceContent />
       </Suspense>
     </div>
   );

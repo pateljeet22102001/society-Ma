@@ -2,6 +2,22 @@ import { createClient } from "@/lib/supabase/server";
 import { getPrimarySociety } from "@/lib/society";
 import type { DashboardStats } from "@/types/database";
 
+type DashboardSummary = DashboardStats & {
+  monthlyChart: { month: string; income: number; expense: number }[];
+  maintenanceChart: { collected: number; pending: number; overdue: number };
+};
+
+const emptyStats = {
+  totalIncome: 0,
+  totalExpense: 0,
+  currentBalance: 0,
+  totalFlats: 0,
+  maintenanceCollected: 0,
+  maintenancePending: 0,
+  paidFlats: 0,
+  pendingFlats: 0,
+} satisfies DashboardStats;
+
 export async function getDashboardData() {
   const supabase = await createClient();
   const society = await getPrimarySociety();
@@ -9,16 +25,7 @@ export async function getDashboardData() {
   if (!society) {
     return {
       society: null,
-      stats: {
-        totalIncome: 0,
-        totalExpense: 0,
-        currentBalance: 0,
-        totalFlats: 0,
-        maintenanceCollected: 0,
-        maintenancePending: 0,
-        paidFlats: 0,
-        pendingFlats: 0,
-      } satisfies DashboardStats,
+      stats: emptyStats,
       recentIncome: [],
       recentExpenses: [],
       recentPayments: [],
@@ -27,112 +34,77 @@ export async function getDashboardData() {
     };
   }
 
-  const [
-    incomeRes,
-    expenseRes,
-    flatsRes,
-    billsRes,
-    recentIncomeRes,
-    recentExpenseRes,
-    recentPaymentsRes,
-  ] = await Promise.all([
-    supabase.from("income_transactions").select("amount, transaction_date").eq("society_id", society.id).eq("status", "active"),
-    supabase.from("expense_transactions").select("amount, transaction_date").eq("society_id", society.id).eq("status", "active"),
-    supabase.from("flats").select("id, status").eq("society_id", society.id),
-    supabase
-      .from("maintenance_bills")
-      .select("paid_amount, pending_amount, status, flat_id")
-      .eq("society_id", society.id),
+  const [summaryRes, recentIncomeRes, recentExpenseRes, recentPaymentsRes] = await Promise.all([
+    supabase.rpc("get_dashboard_summary", { p_society_id: society.id }),
     supabase
       .from("income_transactions")
-      .select("*, category:income_categories(*), flat:flats(flat_number)")
+      .select("id, amount, transaction_date, category:income_categories(name)")
       .eq("society_id", society.id)
       .eq("status", "active")
       .order("transaction_date", { ascending: false })
       .limit(5),
     supabase
       .from("expense_transactions")
-      .select("*, category:expense_categories(*)")
+      .select("id, amount, transaction_date, category:expense_categories(name)")
       .eq("society_id", society.id)
       .eq("status", "active")
       .order("transaction_date", { ascending: false })
       .limit(5),
     supabase
       .from("maintenance_payments")
-      .select("*, flat:flats(flat_number)")
+      .select("id, amount, payment_date, flat:flats(flat_number)")
       .eq("society_id", society.id)
       .order("payment_date", { ascending: false })
       .limit(5),
   ]);
 
-  const totalIncome = (incomeRes.data || []).reduce((sum, row) => sum + Number(row.amount), 0);
-  const totalExpense = (expenseRes.data || []).reduce((sum, row) => sum + Number(row.amount), 0);
-  const totalFlats = flatsRes.data?.length || 0;
-  const maintenanceCollected = (billsRes.data || []).reduce(
-    (sum, row) => sum + Number(row.paid_amount),
-    0,
-  );
-  const maintenancePending = (billsRes.data || []).reduce(
-    (sum, row) => sum + Number(row.pending_amount),
-    0,
-  );
-  const paidFlats = new Set(
-    (billsRes.data || []).filter((b) => b.status === "paid").map((b) => b.flat_id),
-  ).size;
-  const pendingFlats = new Set(
-    (billsRes.data || [])
-      .filter((b) => b.status === "pending" || b.status === "partially_paid" || b.status === "overdue")
-      .map((b) => b.flat_id),
-  ).size;
+  if (summaryRes.error) throw summaryRes.error;
 
-  const monthMap = new Map<string, { month: string; income: number; expense: number }>();
-  for (let i = 5; i >= 0; i -= 1) {
-    const date = new Date();
-    date.setMonth(date.getMonth() - i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const label = date.toLocaleString("en-IN", { month: "short" });
-    monthMap.set(key, { month: label, income: 0, expense: 0 });
-  }
-
-  for (const row of incomeRes.data || []) {
-    const key = String(row.transaction_date).slice(0, 7);
-    if (monthMap.has(key)) {
-      monthMap.get(key)!.income += Number(row.amount);
-    }
-  }
-  for (const row of expenseRes.data || []) {
-    const key = String(row.transaction_date).slice(0, 7);
-    if (monthMap.has(key)) {
-      monthMap.get(key)!.expense += Number(row.amount);
-    }
-  }
-
-  const maintenanceChart = {
-    collected: maintenanceCollected,
-    pending: (billsRes.data || [])
-      .filter((b) => b.status === "pending" || b.status === "partially_paid")
-      .reduce((sum, row) => sum + Number(row.pending_amount), 0),
-    overdue: (billsRes.data || [])
-      .filter((b) => b.status === "overdue")
-      .reduce((sum, row) => sum + Number(row.pending_amount), 0),
-  };
+  const summary = summaryRes.data as DashboardSummary;
+  const stats = {
+    totalIncome: Number(summary.totalIncome || 0),
+    totalExpense: Number(summary.totalExpense || 0),
+    currentBalance: Number(summary.totalIncome || 0) - Number(summary.totalExpense || 0),
+    totalFlats: Number(summary.totalFlats || 0),
+    maintenanceCollected: Number(summary.maintenanceCollected || 0),
+    maintenancePending: Number(summary.maintenancePending || 0),
+    paidFlats: Number(summary.paidFlats || 0),
+    pendingFlats: Number(summary.pendingFlats || 0),
+  } satisfies DashboardStats;
+  const recentIncome = (recentIncomeRes.data || []).map((item) => ({
+    ...item,
+    category: Array.isArray(item.category) ? item.category[0] ?? null : item.category,
+  })) as Array<{
+    id: string;
+    amount: number;
+    transaction_date: string;
+    category: { name: string } | null;
+  }>;
+  const recentExpenses = (recentExpenseRes.data || []).map((item) => ({
+    ...item,
+    category: Array.isArray(item.category) ? item.category[0] ?? null : item.category,
+  })) as Array<{
+    id: string;
+    amount: number;
+    transaction_date: string;
+    category: { name: string } | null;
+  }>;
 
   return {
     society,
-    stats: {
-      totalIncome,
-      totalExpense,
-      currentBalance: totalIncome - totalExpense,
-      totalFlats,
-      maintenanceCollected,
-      maintenancePending,
-      paidFlats,
-      pendingFlats,
-    },
-    recentIncome: recentIncomeRes.data || [],
-    recentExpenses: recentExpenseRes.data || [],
+    stats,
+    recentIncome,
+    recentExpenses,
     recentPayments: recentPaymentsRes.data || [],
-    monthlyChart: Array.from(monthMap.values()),
-    maintenanceChart,
+    monthlyChart: (summary.monthlyChart || []).map((row) => ({
+      month: row.month,
+      income: Number(row.income || 0),
+      expense: Number(row.expense || 0),
+    })),
+    maintenanceChart: {
+      collected: Number(summary.maintenanceChart?.collected || 0),
+      pending: Number(summary.maintenanceChart?.pending || 0),
+      overdue: Number(summary.maintenanceChart?.overdue || 0),
+    },
   };
 }

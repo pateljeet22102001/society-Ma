@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Society, SocietyMemberRole } from "@/types/database";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export const FINANCE_ROLES: readonly SocietyMemberRole[] = [
   "admin", "chairman", "treasurer", "operator",
@@ -11,7 +12,7 @@ export const DELETE_FINANCE_ROLES: readonly SocietyMemberRole[] = [
 export const SETTINGS_ROLES: readonly SocietyMemberRole[] = ["admin", "chairman"];
 
 /** Returns the primary society for this Phase-1 single-society app. */
-export async function getPrimarySociety(): Promise<Society | null> {
+export const getPrimarySociety = cache(async function getPrimarySociety(): Promise<Society | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("societies")
@@ -22,7 +23,7 @@ export async function getPrimarySociety(): Promise<Society | null> {
 
   if (error) throw error;
   return data;
-}
+});
 
 export async function requireSociety(): Promise<Society> {
   const society = await getPrimarySociety();
@@ -32,13 +33,13 @@ export async function requireSociety(): Promise<Society> {
   return society;
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
-}
+});
 
 export async function requireCurrentUser() {
   const user = await getCurrentUser();
@@ -59,8 +60,7 @@ export async function requireRecentAuthentication() {
 
 /** Authorizes a Server Action independently from page and database RLS checks. */
 export async function requireSocietyRole(allowedRoles: readonly SocietyMemberRole[]) {
-  const user = await requireCurrentUser();
-  const society = await requireSociety();
+  const [user, society] = await Promise.all([requireCurrentUser(), requireSociety()]);
   const supabase = await createClient();
   const { data: membership, error } = await supabase
     .from("society_members")

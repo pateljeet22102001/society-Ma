@@ -57,7 +57,11 @@ export function LoginForm() {
       localStorage.setItem("society:session-started", String(loginTime));
       localStorage.setItem("society:last-activity", String(loginTime));
       toast.success("Login successful");
-      router.push("/dashboard");
+      const candidate = new URLSearchParams(window.location.search).get("redirectTo") || "";
+      const redirectTo = candidate.startsWith("/") && !candidate.startsWith("//")
+        ? candidate
+        : "/dashboard";
+      router.push(redirectTo);
       router.refresh();
     } catch (error) {
       setServerError(getErrorMessage(error, "Login failed"));

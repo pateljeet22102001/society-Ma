@@ -1,22 +1,21 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { createClient } from "@/lib/supabase/server";
-import { getPrimarySociety } from "@/lib/society";
+import { getCurrentUser, getPrimarySociety } from "@/lib/society";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, society] = await Promise.all([getCurrentUser(), getPrimarySociety()]);
 
   if (!user) {
     redirect("/login");
   }
 
-  const [{ data: profile }, society] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    getPrimarySociety(),
-  ]);
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .maybeSingle();
 
   return (
     <AppShell

@@ -4,6 +4,28 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  const pathname = request.nextUrl.pathname;
+  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/forgot-password");
+  const isPublicAsset =
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.includes(".");
+  const hasAuthCookie = request.cookies.getAll().some(
+    ({ name }) => name.startsWith("sb-") && name.includes("-auth-token"),
+  );
+
+  // A request without a Supabase session cannot become authenticated by a
+  // remote lookup. Avoid that network round trip for signed-out visitors.
+  if (!hasAuthCookie) {
+    if (!isAuthRoute && !isPublicAsset && pathname !== "/") {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("redirectTo", pathname);
+      return NextResponse.redirect(redirectUrl);
+    }
+    return supabaseResponse;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -29,13 +51,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const pathname = request.nextUrl.pathname;
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/forgot-password");
-  const isPublicAsset =
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.includes(".");
 
   if (!user && !isAuthRoute && !isPublicAsset && pathname !== "/") {
     const redirectUrl = request.nextUrl.clone();

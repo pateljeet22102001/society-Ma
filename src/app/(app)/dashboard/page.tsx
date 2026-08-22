@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { IncomeExpenseChart, MaintenanceChart } from "@/components/dashboard/charts";
+import { LazyIncomeExpenseChart, LazyMaintenanceChart } from "@/components/dashboard/lazy-charts";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { getDashboardData } from "@/lib/queries/dashboard";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -96,13 +96,13 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader title="Monthly Income vs Expense" description="Last 6 months" />
           <CardContent>
-            <IncomeExpenseChart data={data.monthlyChart} />
+            <LazyIncomeExpenseChart data={data.monthlyChart} />
           </CardContent>
         </Card>
         <Card>
           <CardHeader title="Maintenance Collection" description="Collected vs pending overview" />
           <CardContent>
-            <MaintenanceChart data={data.maintenanceChart} />
+            <LazyMaintenanceChart data={data.maintenanceChart} />
           </CardContent>
         </Card>
       </div>
